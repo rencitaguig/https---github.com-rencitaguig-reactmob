@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, TextInput, Button, Text, Image, StyleSheet, FlatList, Modal } from "react-native";
+import { View, TextInput, Button, Text, Image, StyleSheet, FlatList, Modal, ScrollView } from "react-native";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,7 +17,7 @@ export default function ProfileScreen() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
   const [showOrders, setShowOrders] = useState(true); // State to toggle orders visibility
-  const { orders, fetchOrders } = useContext(OrderContext); // Use OrderContext
+  const [userOrders, setUserOrders] = useState([]); // State for user-specific orders
   const [selectedOrder, setSelectedOrder] = useState(null); // State for selected order
   const [reviewModalVisible, setReviewModalVisible] = useState(false); // State for review modal visibility
   const [rating, setRating] = useState(0); // State for rating
@@ -29,16 +29,34 @@ export default function ProfileScreen() {
       const userId = await AsyncStorage.getItem('userId');
       if (token && userId) {
         setLoggedIn(true);
-        const user = await axios.get(`${BASE_URL}/api/users/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setUserName(user.data.name);
-        setProfileImage(user.data.profileImage);
-        fetchOrders(); // Fetch orders
+        try {
+          const user = await axios.get(`${BASE_URL}/api/users/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setUserName(user.data.name);
+          setProfileImage(user.data.profileImage);
+          fetchUserOrders(userId, token); // Fetch orders for the logged-in user
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        }
       }
     };
     checkLoginStatus();
   }, []);
+
+  const fetchUserOrders = async (userId, token) => {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/orders`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const filteredOrders = response.data.filter(
+        (order) => order.userId._id === userId
+      );
+      setUserOrders(filteredOrders);
+    } catch (error) {
+      console.error("Error fetching user orders:", error);
+    }
+  };
 
   const handleLogin = async () => {
     try {
@@ -46,12 +64,11 @@ export default function ProfileScreen() {
       const { token, user } = res.data;
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('userId', user._id);
-      console.log("Token:", token);
       setProfileImage(user.profileImage);
       setUserName(user.name);
       setLoggedIn(true);
       setMessage("Login successful!");
-      fetchOrders();
+      fetchUserOrders(user._id, token);
     } catch (error) {
       console.error("Error during login:", error.response ? error.response.data : error.message);
       setMessage("Error logging in.");
@@ -102,6 +119,7 @@ export default function ProfileScreen() {
     setLoggedIn(false);
     setUserName("");
     setProfileImage(null);
+    setUserOrders([]);
     setMessage("Logged out successfully.");
   };
 
@@ -144,108 +162,119 @@ export default function ProfileScreen() {
     }
   };
 
-  return (
-    <View style={styles.container}>
-      {loggedIn ? (
-        <>
-          <Text style={styles.text}>Welcome, {userName}</Text>
-          {profileImage ? <Image source={{ uri: profileImage }} style={styles.profileImage} /> : null}
-          <Button title="Logout" onPress={handleLogout} />
-          <Button title={showOrders ? "Hide Orders" : "Show Orders"} onPress={() => setShowOrders(!showOrders)} />
-          {showOrders && (
-            <>
-              <Text style={styles.text}>Your Orders:</Text>
+  const renderOrders = () => {
+    if (!userOrders || userOrders.length === 0) {
+      return <Text>No orders found.</Text>;
+    }
+
+    return (
+      <View style={styles.flatListContainer}>
+        <FlatList
+          data={userOrders}
+          keyExtractor={(item) => item._id ? item._id.toString() : "undefined"}
+          renderItem={({ item }) => (
+            <View style={styles.orderCard}>
+              <Text style={styles.orderText}>Order ID: {item._id}</Text>
+              <Text style={styles.orderText}>Total Price: ${item.totalPrice}</Text>
+              <Text style={styles.orderText}>Status: {item.status}</Text>
               <FlatList
-                data={orders}
-                keyExtractor={(item) => item._id ? item._id.toString() : "undefined"}
+                data={item.items}
+                keyExtractor={(item) => item.productId ? item.productId.toString() : "undefined"}
                 renderItem={({ item }) => (
-                  <View style={styles.orderCard}>
-                    <Text style={styles.orderText}>Order ID: {item._id}</Text>
-                    <Text style={styles.orderText}>Total Price: ${item.totalPrice}</Text>
-                    <Text style={styles.orderText}>Status: {item.status}</Text>
-                    <FlatList
-                      data={item.items}
-                      keyExtractor={(item) => item.productId ? item.productId.toString() : "undefined"}
-                      renderItem={({ item }) => (
-                        <View style={styles.itemCard}>
-                          <Text style={styles.itemText}>{item.name}</Text>
-                          <Text style={styles.itemText}>Quantity: {item.quantity}</Text>
-                          <Text style={styles.itemText}>Price: ${item.price}</Text>
-                        </View>
-                      )}
-                    />
-                    {item.status === "Delivered" && (
-                      <Button
-                        title="Write a Review"
-                        onPress={() => {
-                          setSelectedOrder(item);
-                          setReviewModalVisible(true);
-                        }}
-                      />
-                    )}
+                  <View style={styles.itemCard}>
+                    <Text style={styles.itemText}>{item.name}</Text>
+                    <Text style={styles.itemText}>Quantity: {item.quantity}</Text>
+                    <Text style={styles.itemText}>Price: ${item.price}</Text>
                   </View>
                 )}
               />
-            </>
+              {item.status === "Delivered" && (
+                <Button
+                  title="Write a Review"
+                  onPress={() => {
+                    setSelectedOrder(item);
+                    setReviewModalVisible(true);
+                  }}
+                />
+              )}
+            </View>
           )}
-        </>
-      ) : (
-        <>
-          {isLogin ? (
-            <>
-              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-              <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-              <Button title="Login" onPress={handleLogin} />
-              <Button title="Switch to Register" onPress={() => setIsLogin(false)} />
-            </>
-          ) : (
-            <>
-              <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
-              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-              <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-              <Button title="Choose Image" onPress={pickImage} />
-              <Button title="Register" onPress={handleRegister} />
-              <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
-            </>
-          )}
-        </>
-      )}
-      {message ? <Text>{message}</Text> : null}
+        />
+      </View>
+    );
+  };
 
-      {/* Review Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={reviewModalVisible}
-        onRequestClose={() => setReviewModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Write a Review</Text>
-            <TextInput
-              placeholder="Rating (1-5)"
-              value={rating.toString()}
-              onChangeText={setRating}
-              keyboardType="numeric"
-              style={styles.input}
-            />
-            <TextInput
-              placeholder="Comment"
-              value={comment}
-              onChangeText={setComment}
-              style={styles.input}
-            />
-            <Button title="Submit Review" onPress={handleReviewSubmit} />
-            <Button title="Cancel" onPress={() => setReviewModalVisible(false)} />
+  return (
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.container}>
+        {loggedIn ? (
+          <>
+            <Text style={styles.text}>Welcome, {userName}</Text>
+            {profileImage ? <Image source={{ uri: profileImage }} style={styles.profileImage} /> : null}
+            <Button title="Logout" onPress={handleLogout} />
+            <Button title={showOrders ? "Hide Orders" : "Show Orders"} onPress={() => setShowOrders(!showOrders)} />
+            {showOrders && renderOrders()}
+          </>
+        ) : (
+          <>
+            {isLogin ? (
+              <>
+                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+                <Button title="Login" onPress={handleLogin} />
+                <Button title="Switch to Register" onPress={() => setIsLogin(false)} />
+              </>
+            ) : (
+              <>
+                <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
+                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+                <Button title="Choose Image" onPress={pickImage} />
+                <Button title="Register" onPress={handleRegister} />
+                <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
+              </>
+            )}
+          </>
+        )}
+        {message ? <Text>{message}</Text> : null}
+
+        {/* Review Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={reviewModalVisible}
+          onRequestClose={() => setReviewModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Write a Review</Text>
+              <TextInput
+                placeholder="Rating (1-5)"
+                value={rating.toString()}
+                onChangeText={setRating}
+                keyboardType="numeric"
+                style={styles.input}
+              />
+              <TextInput
+                placeholder="Comment"
+                value={comment}
+                onChangeText={setComment}
+                style={styles.input}
+              />
+              <Button title="Submit Review" onPress={handleReviewSubmit} />
+              <Button title="Cancel" onPress={() => setReviewModalVisible(false)} />
+            </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center" },
+  scrollContainer: { flexGrow: 1, padding: 10, backgroundColor: "#f8f8f8" },
+  container: { flex: 1, paddingTop: 50 }, // Added paddingTop to move content downwards
+  flatListContainer: { maxHeight: 400, marginBottom: 20 }, // Limit height for FlatList
   text: { fontSize: 18, fontWeight: "bold" },
   input: { width: 200, height: 40, borderColor: "gray", borderWidth: 1, marginBottom: 10, padding: 10 },
   profileImage: { width: 100, height: 100, borderRadius: 50, marginTop: 20 },

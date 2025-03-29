@@ -15,13 +15,11 @@ export const OrderProvider = ({ children }) => {
   const fetchOrders = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const userId = await AsyncStorage.getItem('userId');
-      if (token && userId) {
+      if (token) {
         const response = await axios.get(`${BASE_URL}/api/orders`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        const userOrders = response.data.filter(order => order.userId._id === userId);
-        setOrders(userOrders);
+        setOrders(response.data); // Fetch all orders without filtering by user ID
       }
     } catch (error) {
       console.error("Error fetching orders:", error);

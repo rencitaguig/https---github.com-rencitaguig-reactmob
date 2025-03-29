@@ -1,120 +1,55 @@
-import React, { useState, useEffect } from "react";
-import { View, TextInput, Button, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useState, useEffect, useContext } from "react";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Button, ScrollView } from "react-native";
 import { Picker } from '@react-native-picker/picker';
-import * as ImagePicker from "expo-image-picker";
-import axios from "axios";
-import { useSelector, useDispatch } from "react-redux";
-import { fetchOrders, updateOrderStatus } from "../store/orderSlice";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import BASE_URL from "../config";
+import { OrderContext } from "../context/OrderContext";
 
 export default function AdminScreen() {
-  const dispatch = useDispatch();
-  const { orders, loading: ordersLoading } = useSelector((state) => state.orders);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [category, setCategory] = useState("");
-  const [image, setImage] = useState(null);
-  const [message, setMessage] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [status, setStatus] = useState("Pending");
+  const { orders, fetchOrders, updateOrderStatus } = useContext(OrderContext);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const fetchData = async () => {
-      const token = await AsyncStorage.getItem("token");
-      dispatch(fetchOrders(token));
-    };
-    fetchData();
-  }, [dispatch]);
-
-  const handleImagePick = async () => {
-    try {
-      let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 1,
-      });
-
-      if (!result.cancelled) {
-        setImage(result);
-      }
-    } catch (error) {
-      console.error("Error picking image:", error);
-      setMessage("Failed to pick image.");
-    }
-  };
-
-  const handleSubmit = async () => {
-    const formData = new FormData();
-    formData.append("name", name);
-    formData.append("description", description);
-    formData.append("price", price);
-    formData.append("category", category);
-    if (image) {
-      formData.append("image", {
-        uri: image.uri,
-        type: 'image/jpeg',
-        name: image.uri.split('/').pop(),
-      });
-    }
-
-    try {
-      const storedToken = await AsyncStorage.getItem('token');
-      if (!storedToken) {
-        setMessage("No token found. Please log in again.");
-        return;
-      }
-      const res = await axios.post(`${BASE_URL}/api/products`, formData, {
-        headers: { 
-          "Content-Type": "multipart/form-data",
-          "Authorization": `Bearer ${storedToken}`
-        },
-      });
-      setMessage("Product created successfully!");
-    } catch (error) {
-      console.error("Error creating product:", error.response ? error.response.data : error.message);
-      setMessage("Error creating product.");
-    }
-  };
+    fetchOrders(); // Fetch all orders
+  }, []);
 
   const handleUpdateOrderStatus = async () => {
-    const token = await AsyncStorage.getItem("token");
-    dispatch(updateOrderStatus({ orderId: selectedOrder, status, token }));
+    if (!selectedOrder) {
+      setMessage("Please select an order.");
+      return;
+    }
+
+    await updateOrderStatus(selectedOrder, status);
+    setMessage("Order status updated successfully!");
   };
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.formContainer}>
-        <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
-        <TextInput placeholder="Description" value={description} onChangeText={setDescription} style={styles.input} />
-        <TextInput placeholder="Price" value={price} onChangeText={setPrice} style={styles.input} />
-        <TextInput placeholder="Category" value={category} onChangeText={setCategory} style={styles.input} />
-        <Button title="Choose Image" onPress={handleImagePick} />
-        <Button title="Create Product" onPress={handleSubmit} />
-        {message ? <Text>{message}</Text> : null}
-      </View>
+  const renderContent = () => {
+    if (!orders || orders.length === 0) {
+      return <Text>No orders available.</Text>;
+    }
 
+    return (
       <View style={styles.orderStatusContainer}>
         <Text style={styles.sectionTitle}>Update Order Status</Text>
-        <FlatList
-          data={orders}
-          keyExtractor={(item) => item._id.toString()}
-          renderItem={({ item }) => (
-            <TouchableOpacity 
-              onPress={() => setSelectedOrder(item._id)}
-              style={[
-                styles.orderItem,
-                selectedOrder === item._id && styles.selectedOrderItem
-              ]}
-            >
-              <Text>
-                Order ID: {item._id} - Status: {item.status}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
+        <View style={styles.flatListContainer}>
+          <FlatList
+            data={orders}
+            keyExtractor={(item) => item._id.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => setSelectedOrder(item._id)}
+                style={[
+                  styles.orderItem,
+                  selectedOrder === item._id && styles.selectedOrderItem,
+                ]}
+              >
+                <Text>
+                  Order ID: {item._id} - Status: {item.status}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
         <Picker
           selectedValue={status}
           onValueChange={(itemValue) => setStatus(itemValue)}
@@ -126,18 +61,25 @@ export default function AdminScreen() {
           <Picker.Item label="Cancelled" value="Cancelled" />
         </Picker>
         <Button title="Update Status" onPress={handleUpdateOrderStatus} />
+        {message ? <Text>{message}</Text> : null}
       </View>
-    </View>
+    );
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.container}>{renderContent()}</View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 10, backgroundColor: "#f8f8f8" },
-  formContainer: { marginTop: 20 },
-  input: { height: 40, borderColor: "gray", borderWidth: 1, marginBottom: 10, paddingHorizontal: 10 },
+  scrollContainer: { flexGrow: 1, padding: 10, backgroundColor: "#f8f8f8" },
+  container: { flex: 1 },
   orderStatusContainer: { marginTop: 40 },
   sectionTitle: { marginTop: 20, fontWeight: "bold" },
+  flatListContainer: { maxHeight: 300, marginBottom: 20 }, // Limit height for FlatList
   orderItem: { padding: 10, backgroundColor: "#fff", marginVertical: 5 },
   selectedOrderItem: { backgroundColor: "#d3d3d3" },
-  picker: { height: 50, width: 150, marginVertical: 10 }
+  picker: { height: 50, width: "100%", marginVertical: 10 },
 });
