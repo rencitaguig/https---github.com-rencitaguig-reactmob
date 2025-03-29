@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { CartContext } from "../context/CartContext";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function CartScreen() {
   const { cart, removeFromCart, checkout } = useContext(CartContext);
@@ -28,22 +29,25 @@ export default function CartScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <LinearGradient
+      colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
+      style={styles.container}
+    >
       {cart.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.text}>Your Cart is Empty</Text>
+          <Text style={styles.emptyText}>Your Cart is Empty</Text>
         </View>
       ) : (
         <>
           <FlatList
             data={cart}
-            keyExtractor={(item) => item._id.toString()}
+            keyExtractor={(item, index) => `${item._id}-${index}`}
             renderItem={({ item }) => (
               <View style={styles.card}>
                 <Image source={{ uri: item.image }} style={styles.image} />
                 <View style={styles.details}>
                   <Text style={styles.title}>{item.name}</Text>
-                  <Text style={styles.price}>${item.price}</Text>
+                  <Text style={styles.price}>₱{item.price.toFixed(2)}</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.removeButton}
@@ -53,25 +57,35 @@ export default function CartScreen() {
                 </TouchableOpacity>
               </View>
             )}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
           />
 
-          {/* Checkout Button */}
-          <TouchableOpacity
-            style={styles.checkoutButton}
-            onPress={() => setModalVisible(true)}
-          >
-            <Text style={styles.checkoutText}>Checkout</Text>
-          </TouchableOpacity>
+          <View style={styles.checkoutContainer}>
+            <TouchableOpacity
+              style={styles.checkoutButton}
+              onPress={() => setModalVisible(true)}
+            >
+              <Text style={styles.checkoutText}>
+                Checkout • ₱{totalPrice.toFixed(2)}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-          {/* Checkout Modal */}
-          <Modal animationType="slide" transparent={true} visible={modalVisible}>
+          <Modal 
+            animationType="slide" 
+            transparent={true} 
+            visible={modalVisible}
+          >
             <View style={styles.modalContainer}>
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Order Summary</Text>
-                <Text style={styles.modalText}>Total: ${totalPrice.toFixed(2)}</Text>
+                <Text style={styles.modalPrice}>
+                  Total: ${totalPrice.toFixed(2)}
+                </Text>
                 <TouchableOpacity
                   style={styles.confirmButton}
-                  onPress={handleCheckout} // Use handleCheckout function
+                  onPress={handleCheckout}
                 >
                   <Text style={styles.confirmText}>Confirm Order</Text>
                 </TouchableOpacity>
@@ -86,29 +100,147 @@ export default function CartScreen() {
           </Modal>
         </>
       )}
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 10, backgroundColor: "#f8f8f8" },
-  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center" }, // Center the empty cart text
-  text: { fontSize: 18, fontWeight: "bold", textAlign: "center" },
-  card: { flexDirection: "row", alignItems: "center", backgroundColor: "white", padding: 10, marginVertical: 5, borderRadius: 8 },
-  image: { width: 60, height: 60, resizeMode: "contain", marginRight: 10 },
-  details: { flex: 1 },
-  title: { fontSize: 14, fontWeight: "bold" },
-  price: { fontSize: 16, color: "green" },
-  removeButton: { backgroundColor: "#FF6347", padding: 8, borderRadius: 5 },
-  buttonText: { color: "white", fontWeight: "bold" },
-  checkoutButton: { backgroundColor: "#008CBA", padding: 15, borderRadius: 8, marginTop: 20, alignItems: "center" },
-  checkoutText: { color: "white", fontSize: 18, fontWeight: "bold" },
-  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
-  modalContent: { backgroundColor: "white", padding: 20, borderRadius: 10, width: "80%", alignItems: "center" },
-  modalTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 10 },
-  modalText: { fontSize: 16, marginBottom: 20 },
-  confirmButton: { backgroundColor: "#008CBA", padding: 10, borderRadius: 5, marginBottom: 10 },
-  confirmText: { color: "white", fontSize: 16, fontWeight: "bold" },
-  cancelButton: { backgroundColor: "gray", padding: 10, borderRadius: 5 },
-  cancelText: { color: "white", fontSize: 16, fontWeight: "bold" },
+  container: {
+    flex: 1,
+  },
+  listContainer: {
+    padding: 15,
+    paddingBottom: 100, // Space for checkout button
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#3E2723',
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 15,
+    marginBottom: 12,
+    borderRadius: 15,
+    elevation: 3,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  image: {
+    width: 70,
+    height: 70,
+    borderRadius: 10,
+    marginRight: 15,
+  },
+  details: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3E2723',
+    marginBottom: 4,
+  },
+  price: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#8B4513',
+  },
+  removeButton: {
+    backgroundColor: '#D7CCC8',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+  },
+  buttonText: {
+    color: '#3E2723',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  checkoutContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  checkoutButton: {
+    backgroundColor: '#8B4513',
+    padding: 18,
+    borderRadius: 30,
+    alignItems: 'center',
+  },
+  checkoutText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    padding: 25,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#3E2723',
+    marginBottom: 15,
+  },
+  modalPrice: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#8B4513',
+    marginBottom: 25,
+  },
+  confirmButton: {
+    backgroundColor: '#8B4513',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    width: '100%',
+    marginBottom: 12,
+  },
+  confirmText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#D7CCC8',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    width: '100%',
+  },
+  cancelText: {
+    color: '#3E2723',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });

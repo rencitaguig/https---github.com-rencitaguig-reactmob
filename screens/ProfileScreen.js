@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, TextInput, Button, Text, Image, StyleSheet, FlatList, Modal } from "react-native";
+import { View, TextInput, Button, Text, Image, StyleSheet, FlatList, Modal, ScrollView, TouchableOpacity, Dimensions } from "react-native";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BASE_URL from "../config"; // Import BASE_URL
 import { OrderContext } from "../context/OrderContext"; // Import OrderContext
+import { LinearGradient } from 'expo-linear-gradient';
+import Toast from 'react-native-toast-message';
 
 export default function ProfileScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -46,15 +48,25 @@ export default function ProfileScreen() {
       const { token, user } = res.data;
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('userId', user._id);
-      console.log("Token:", token);
       setProfileImage(user.profileImage);
       setUserName(user.name);
       setLoggedIn(true);
-      setMessage("Login successful!");
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Logged in successfully! 👋',
+        visibilityTime: 3000,
+        position: 'top',
+      });
       fetchOrders();
     } catch (error) {
-      console.error("Error during login:", error.response ? error.response.data : error.message);
-      setMessage("Error logging in.");
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to login. Please try again.',
+        visibilityTime: 3000,
+        position: 'top',
+      });
     }
   };
 
@@ -88,11 +100,22 @@ export default function ProfileScreen() {
       await axios.post(`${BASE_URL}/api/auth/register`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      setMessage("Registration successful!");
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Registration successful! Please login.',
+        visibilityTime: 3000,
+        position: 'top',
+      });
       setIsLogin(true);
     } catch (error) {
-      console.error("Error during registration:", error.response ? error.response.data : error.message);
-      setMessage("Error registering.");
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to register. Please try again.',
+        visibilityTime: 3000,
+        position: 'top',
+      });
     }
   };
 
@@ -102,20 +125,26 @@ export default function ProfileScreen() {
     setLoggedIn(false);
     setUserName("");
     setProfileImage(null);
-    setMessage("Logged out successfully.");
+    Toast.show({
+      type: 'success',
+      text1: 'Success',
+      text2: 'Logged out successfully! 👋',
+      visibilityTime: 3000,
+      position: 'top',
+    });
   };
 
   const pickImage = async () => {
     try {
-      let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaType.Images, // Updated from MediaTypeOptions
         allowsEditing: true,
-        aspect: [4, 3],
+        aspect: [1, 1],
         quality: 1,
       });
-  
-      if (!result.cancelled) {
-        setImage(result);
+
+      if (!result.canceled) { // Note: changed from 'cancelled' to 'canceled'
+        setImage(result.assets[0]); // Updated to use assets array
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -136,124 +165,403 @@ export default function ProfileScreen() {
       await axios.post(`${BASE_URL}/api/reviews`, reviewData, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setMessage("Review submitted successfully!");
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Review submitted successfully! 🌟',
+        visibilityTime: 3000,
+        position: 'top',
+      });
       setReviewModalVisible(false);
     } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to submit review. Please try again.',
+        visibilityTime: 3000,
+        position: 'top',
+      });
       console.error("Error submitting review:", error.response ? error.response.data : error.message);
-      setMessage("Error submitting review.");
     }
   };
 
   return (
     <View style={styles.container}>
-      {loggedIn ? (
-        <>
-          <Text style={styles.text}>Welcome, {userName}</Text>
-          {profileImage ? <Image source={{ uri: profileImage }} style={styles.profileImage} /> : null}
-          <Button title="Logout" onPress={handleLogout} />
-          <Button title={showOrders ? "Hide Orders" : "Show Orders"} onPress={() => setShowOrders(!showOrders)} />
-          {showOrders && (
-            <>
-              <Text style={styles.text}>Your Orders:</Text>
-              <FlatList
-                data={orders}
-                keyExtractor={(item) => item._id ? item._id.toString() : "undefined"}
-                renderItem={({ item }) => (
-                  <View style={styles.orderCard}>
-                    <Text style={styles.orderText}>Order ID: {item._id}</Text>
-                    <Text style={styles.orderText}>Total Price: ${item.totalPrice}</Text>
-                    <Text style={styles.orderText}>Status: {item.status}</Text>
-                    <FlatList
-                      data={item.items}
-                      keyExtractor={(item) => item.productId ? item.productId.toString() : "undefined"}
-                      renderItem={({ item }) => (
-                        <View style={styles.itemCard}>
-                          <Text style={styles.itemText}>{item.name}</Text>
-                          <Text style={styles.itemText}>Quantity: {item.quantity}</Text>
-                          <Text style={styles.itemText}>Price: ${item.price}</Text>
-                        </View>
-                      )}
-                    />
-                    {item.status === "Delivered" && (
-                      <Button
-                        title="Write a Review"
-                        onPress={() => {
-                          setSelectedOrder(item);
-                          setReviewModalVisible(true);
-                        }}
-                      />
-                    )}
-                  </View>
-                )}
-              />
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          {isLogin ? (
-            <>
-              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-              <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-              <Button title="Login" onPress={handleLogin} />
-              <Button title="Switch to Register" onPress={() => setIsLogin(false)} />
-            </>
-          ) : (
-            <>
-              <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
-              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-              <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-              <Button title="Choose Image" onPress={pickImage} />
-              <Button title="Register" onPress={handleRegister} />
-              <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
-            </>
-          )}
-        </>
-      )}
-      {message ? <Text>{message}</Text> : null}
-
-      {/* Review Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={reviewModalVisible}
-        onRequestClose={() => setReviewModalVisible(false)}
+      <LinearGradient
+        colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
+        style={styles.gradientBackground}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Write a Review</Text>
-            <TextInput
-              placeholder="Rating (1-5)"
-              value={rating.toString()}
-              onChangeText={setRating}
-              keyboardType="numeric"
-              style={styles.input}
-            />
-            <TextInput
-              placeholder="Comment"
-              value={comment}
-              onChangeText={setComment}
-              style={styles.input}
-            />
-            <Button title="Submit Review" onPress={handleReviewSubmit} />
-            <Button title="Cancel" onPress={() => setReviewModalVisible(false)} />
-          </View>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../assets/logo.png')} // Make sure to add your logo file
+            style={styles.logo}
+          />
         </View>
-      </Modal>
+        
+        {loggedIn ? (
+          <View style={styles.profileContainer}>
+            {profileImage && (
+              <Image 
+                source={{ uri: profileImage }} 
+                style={styles.profileImage} 
+              />
+            )}
+            <Text style={styles.welcomeText}>Welcome, {userName}</Text>
+            <TouchableOpacity 
+              style={styles.button} 
+              onPress={handleLogout}
+            >
+              <Text style={styles.buttonText}>Logout</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.button} 
+              onPress={() => setShowOrders(!showOrders)}
+            >
+              <Text style={styles.buttonText}>
+                {showOrders ? "Hide Orders" : "Show Orders"}
+              </Text>
+            </TouchableOpacity>
+            
+            {showOrders && (
+              <>
+                <Text style={styles.sectionTitle}>Your Orders</Text>
+                <FlatList
+                  data={orders}
+                  keyExtractor={(item) => item._id ? item._id.toString() : "undefined"}
+                  renderItem={({ item }) => (
+                    <View style={styles.orderCard}>
+                      <View style={styles.orderHeader}>
+                        <Text style={styles.orderId}>Order #{item._id.slice(-6)}</Text>
+                        <View style={[styles.statusBadge, 
+                          { backgroundColor: item.status === "Delivered" ? "#8D6E63" : "#BCAAA4" }
+                        ]}>
+                          <Text style={styles.statusText}>{item.status}</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.orderDetails}>
+                        <Text style={styles.orderDate}>
+                          {new Date(item.createdAt).toLocaleDateString()}
+                        </Text>
+                        <Text style={styles.totalPrice}>₱{item.totalPrice.toFixed(2)}</Text>
+                      </View>
+
+                      <View style={styles.itemsList}>
+                        {item.items.map((orderItem) => (
+                          <View 
+                            key={orderItem.productId} 
+                            style={styles.itemCard}
+                          >
+                            <View style={styles.itemInfo}>
+                              <Text style={styles.itemName}>{orderItem.name}</Text>
+                              <Text style={styles.itemQuantity}>Qty: {orderItem.quantity}</Text>
+                            </View>
+                            <Text style={styles.itemPrice}>₱{orderItem.price}</Text>
+                          </View>
+                        ))}
+                      </View>
+
+                      {item.status === "Delivered" && (
+                        <TouchableOpacity
+                          style={styles.reviewButton}
+                          onPress={() => {
+                            setSelectedOrder(item);
+                            setReviewModalVisible(true);
+                          }}
+                        >
+                          <Text style={styles.reviewButtonText}>Write a Review</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                  contentContainerStyle={styles.listContainer}
+                  showsVerticalScrollIndicator={false}
+                />
+              </>
+            )}
+          </View>
+        ) : (
+          <View style={styles.profileContainer}>
+            {isLogin ? (
+              <>
+                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+                <TouchableOpacity style={styles.button} onPress={handleLogin}>
+                  <Text style={styles.buttonText}>Login</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.button} onPress={() => setIsLogin(false)}>
+                  <Text style={styles.buttonText}>Switch to Register</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
+                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+                <TouchableOpacity style={styles.button} onPress={pickImage}>
+                  <Text style={styles.buttonText}>Choose Image</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.button} onPress={handleRegister}>
+                  <Text style={styles.buttonText}>Register</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.button} onPress={() => setIsLogin(true)}>
+                  <Text style={styles.buttonText}>Switch to Login</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+        {message ? <Text>{message}</Text> : null}
+
+        {/* Review Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={reviewModalVisible}
+          onRequestClose={() => setReviewModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <ScrollView style={styles.modalScrollView}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Write a Review</Text>
+                <TextInput
+                  placeholder="Rating (1-5)"
+                  value={rating.toString()}
+                  onChangeText={setRating}
+                  keyboardType="numeric"
+                  style={styles.input}
+                  placeholderTextColor="#3E2723"
+                />
+                <TextInput
+                  placeholder="Comment"
+                  value={comment}
+                  onChangeText={setComment}
+                  style={[styles.input, styles.textArea]}
+                  multiline
+                  numberOfLines={4}
+                  placeholderTextColor="#3E2723"
+                />
+                <TouchableOpacity style={styles.button} onPress={handleReviewSubmit}>
+                  <Text style={styles.buttonText}>Submit Review</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.button, { marginBottom: 20 }]} onPress={() => setReviewModalVisible(false)}>
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </Modal>
+        <Toast />
+      </LinearGradient>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center" },
-  text: { fontSize: 18, fontWeight: "bold" },
-  input: { width: 200, height: 40, borderColor: "gray", borderWidth: 1, marginBottom: 10, padding: 10 },
-  profileImage: { width: 100, height: 100, borderRadius: 50, marginTop: 20 },
-  orderCard: { backgroundColor: "white", padding: 10, marginVertical: 5, borderRadius: 8, width: "90%" },
-  orderText: { fontSize: 16, fontWeight: "bold" },
-  itemCard: { backgroundColor: "#f0f0f0", padding: 5, marginVertical: 5, borderRadius: 5 },
-  itemText: { fontSize: 14 },
-  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
-  modalContent: { backgroundColor: "white", padding: 20, borderRadius: 10, width: "80%", alignItems: "center" },
-  modalTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 10 },
+  container: {
+    flex: 1,
+  },
+  gradientBackground: {
+    flex: 1,
+  },
+  logoContainer: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 40,
+    marginBottom: 1,
+  },
+  logo: {
+    width: 350,
+    height: 190,
+    resizeMode: 'contain',
+  },
+  profileContainer: {
+    flex: 1,
+    padding: 20,
+    marginTop: 10,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    marginTop: 40,
+    alignSelf: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#3E2723',
+    textAlign: 'center',
+    marginTop: 1,
+    marginBottom: 30,
+  },
+  button: {
+    backgroundColor: 'rgba(62, 39, 35, 0.9)',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 30,
+    marginVertical: 8,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  buttonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+  },
+  orderCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 16,
+    marginBottom: 15,
+    elevation: 3,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  orderId: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3E2723',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  orderDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEBE9',
+  },
+  orderDate: {
+    color: '#8D6E63',
+    fontSize: 14,
+  },
+  totalPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#3E2723',
+  },
+  itemsList: {
+    marginTop: 12,
+  },
+  itemCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEBE9',
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: 15,
+    color: '#5D4037',
+    marginBottom: 4,
+  },
+  itemQuantity: {
+    fontSize: 13,
+    color: '#8D6E63',
+  },
+  itemPrice: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#3E2723',
+  },
+  reviewButton: {
+    backgroundColor: '#8B4513',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    alignSelf: 'flex-end',
+    marginTop: 12,
+  },
+  reviewButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  listContainer: {
+    paddingHorizontal: 15,
+    paddingBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#3E2723',
+    marginBottom: 15,
+    marginTop: 10,
+  },
+  input: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    width: '100%',
+    height: 55,
+    borderRadius: 30,
+    paddingHorizontal: 25,
+    marginBottom: 15,
+    fontSize: 16,
+    color: '#3E2723',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalScrollView: {
+    maxHeight: '80%',
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+    paddingTop: 12,
+  },
+  modalContent: {
+    backgroundColor: '#FFF',
+    padding: 25,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    elevation: 20,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#3E2723',
+    marginBottom: 25,
+    textAlign: 'center',
+  },
 });
