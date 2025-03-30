@@ -170,8 +170,8 @@ export default function HomeScreen({ navigation }) {
                 onChangeText={setEditComment}
                 style={[styles.input, styles.textArea]}
                 multiline
-                numberOfLines={4}
-                placeholderTextColor="#3E2723"
+                numberOfLine
+                placeholderTextColor="#3E2s={4}723"
               />
               <TouchableOpacity style={styles.updateButton} onPress={handleUpdateReview}>
                 <Text style={styles.updateButtonText}>Submit Update</Text>
