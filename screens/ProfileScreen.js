@@ -19,6 +19,7 @@ import BASE_URL from "../config"; // Import BASE_URL
 import { LinearGradient } from 'expo-linear-gradient';
 import Toast from 'react-native-toast-message';
 import { CartContext } from "../context/CartContext"; // Import CartContext
+import { AuthContext } from '../context/AuthContext'; // Import AuthContext
 import { useFocusEffect } from "@react-navigation/native"; // Import useFocusEffect
 
 export default function ProfileScreen() {
@@ -39,6 +40,7 @@ export default function ProfileScreen() {
   const [comment, setComment] = useState(""); // Comment state
 
   const { setOnOrderPlaced } = useContext(CartContext); // Access CartContext
+  const { setUserRole } = useContext(AuthContext); // Access AuthContext
 
   useEffect(() => {
     const checkLoginStatus = async () => {
@@ -103,6 +105,8 @@ export default function ProfileScreen() {
       const { token, user } = res.data;
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('userId', user._id);
+      await AsyncStorage.setItem('userRole', user.role);
+      setUserRole(user.role);
       setProfileImage(user.profileImage);
       setUserName(user.name);
       setLoggedIn(true);
@@ -177,6 +181,8 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('userId');
+    await AsyncStorage.removeItem('userRole');
+    setUserRole(null);
     setLoggedIn(false);
     setUserName("");
     setProfileImage(null);

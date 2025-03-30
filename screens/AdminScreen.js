@@ -22,14 +22,10 @@ const windowHeight = Dimensions.get('window').height;
 export default function AdminScreen() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [status, setStatus] = useState("Pending");
-  const { orders, fetchOrders, updateOrderStatus } = useContext(OrderContext);
+  const { orders, updateOrderStatus } = useContext(OrderContext);
   const [message, setMessage] = useState("");
   const [updateMessage, setUpdateMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    fetchOrders(); // Fetch all orders on mount
-  }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
