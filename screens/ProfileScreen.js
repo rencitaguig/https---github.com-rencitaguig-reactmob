@@ -1,12 +1,25 @@
 import React, { useState, useEffect, useContext } from "react";
-import { View, TextInput, Button, Text, Image, StyleSheet, FlatList, Modal, ScrollView, TouchableOpacity, Dimensions } from "react-native";
+import { 
+  View, 
+  TextInput, 
+  Button, 
+  Text, 
+  Image, 
+  StyleSheet, 
+  FlatList, 
+  Modal, 
+  ScrollView, 
+  TouchableOpacity, 
+  Dimensions 
+} from "react-native";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BASE_URL from "../config"; // Import BASE_URL
-import { OrderContext } from "../context/OrderContext"; // Import OrderContext
 import { LinearGradient } from 'expo-linear-gradient';
 import Toast from 'react-native-toast-message';
+import { CartContext } from "../context/CartContext"; // Import CartContext
+import { useFocusEffect } from "@react-navigation/native"; // Import useFocusEffect
 
 export default function ProfileScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -18,12 +31,14 @@ export default function ProfileScreen() {
   const [message, setMessage] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
-  const [showOrders, setShowOrders] = useState(true); // State to toggle orders visibility
-  const [userOrders, setUserOrders] = useState([]); // State for user-specific orders
-  const [selectedOrder, setSelectedOrder] = useState(null); // State for selected order
-  const [reviewModalVisible, setReviewModalVisible] = useState(false); // State for review modal visibility
-  const [rating, setRating] = useState(0); // State for rating
-  const [comment, setComment] = useState(""); // State for comment
+  const [showOrders, setShowOrders] = useState(true); // Toggle orders visibility
+  const [userOrders, setUserOrders] = useState([]); // User-specific orders
+  const [selectedOrder, setSelectedOrder] = useState(null); // Selected order for review
+  const [reviewModalVisible, setReviewModalVisible] = useState(false); // Review modal visibility
+  const [rating, setRating] = useState(0); // Rating state
+  const [comment, setComment] = useState(""); // Comment state
+
+  const { setOnOrderPlaced } = useContext(CartContext); // Access CartContext
 
   useEffect(() => {
     const checkLoginStatus = async () => {
@@ -32,11 +47,11 @@ export default function ProfileScreen() {
       if (token && userId) {
         setLoggedIn(true);
         try {
-          const user = await axios.get(`${BASE_URL}/api/users/${userId}`, {
+          const userRes = await axios.get(`${BASE_URL}/api/users/${userId}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
-          setUserName(user.data.name);
-          setProfileImage(user.data.profileImage);
+          setUserName(userRes.data.name);
+          setProfileImage(userRes.data.profileImage);
           fetchUserOrders(userId, token); // Fetch orders for the logged-in user
         } catch (error) {
           console.error("Error fetching user data:", error);
@@ -44,7 +59,29 @@ export default function ProfileScreen() {
       }
     };
     checkLoginStatus();
+
+    // Set the callback to refresh orders when a new order is placed
+    setOnOrderPlaced(() => async () => {
+      const token = await AsyncStorage.getItem('token');
+      const userId = await AsyncStorage.getItem('userId');
+      if (token && userId) {
+        fetchUserOrders(userId, token);
+      }
+    });
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const refreshOrders = async () => {
+        const token = await AsyncStorage.getItem('token');
+        const userId = await AsyncStorage.getItem('userId');
+        if (token && userId) {
+          fetchUserOrders(userId, token); // Fetch updated orders when screen is focused
+        }
+      };
+      refreshOrders();
+    }, [])
+  );
 
   const fetchUserOrders = async (userId, token) => {
     try {
@@ -76,7 +113,7 @@ export default function ProfileScreen() {
         visibilityTime: 3000,
         position: 'top',
       });
-      fetchOrders();
+      fetchUserOrders(user._id, token);
     } catch (error) {
       Toast.show({
         type: 'error',
@@ -155,14 +192,14 @@ export default function ProfileScreen() {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images, // Updated from MediaTypeOptions
+        mediaTypes: ImagePicker.MediaType.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 1,
       });
 
-      if (!result.canceled) { // Note: changed from 'cancelled' to 'canceled'
-        setImage(result.assets[0]); // Updated to use assets array
+      if (!result.canceled) { 
+        setImage(result.assets[0]);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -208,73 +245,80 @@ export default function ProfileScreen() {
       return <Text>No orders found.</Text>;
     }
 
-  return (
-    <View style={styles.container}>
-      {loggedIn ? (
-        <>
-          <Text style={styles.text}>Welcome, {userName}</Text>
-          {profileImage ? <Image source={{ uri: profileImage }} style={styles.profileImage} /> : null}
-          <Button title="Logout" onPress={handleLogout} />
-          <Button title={showOrders ? "Hide Orders" : "Show Orders"} onPress={() => setShowOrders(!showOrders)} />
-          {showOrders && (
-            <>
-              <Text style={styles.text}>Your Orders:</Text>
+    return (
+      <>
+        <Text style={styles.text}>Your Orders:</Text>
+        <FlatList
+          data={userOrders}
+          keyExtractor={(item) => (item._id ? item._id.toString() : "undefined")}
+          renderItem={({ item }) => (
+            <View style={styles.orderCard}>
+              <Text style={styles.orderText}>Order ID: {item._id}</Text>
+              <Text style={styles.orderText}>Total Price: ${item.totalPrice}</Text>
+              <Text style={styles.orderText}>Status: {item.status}</Text>
               <FlatList
-                data={orders}
-                keyExtractor={(item) => item._id ? item._id.toString() : "undefined"}
+                data={item.items}
+                keyExtractor={(item) => (item.productId ? item.productId.toString() : "undefined")}
                 renderItem={({ item }) => (
-                  <View style={styles.orderCard}>
-                    <Text style={styles.orderText}>Order ID: {item._id}</Text>
-                    <Text style={styles.orderText}>Total Price: ${item.totalPrice}</Text>
-                    <Text style={styles.orderText}>Status: {item.status}</Text>
-                    <FlatList
-                      data={item.items}
-                      keyExtractor={(item) => item.productId ? item.productId.toString() : "undefined"}
-                      renderItem={({ item }) => (
-                        <View style={styles.itemCard}>
-                          <Text style={styles.itemText}>{item.name}</Text>
-                          <Text style={styles.itemText}>Quantity: {item.quantity}</Text>
-                          <Text style={styles.itemText}>Price: ${item.price}</Text>
-                        </View>
-                      )}
-                    />
-                    {item.status === "Delivered" && (
-                      <Button
-                        title="Write a Review"
-                        onPress={() => {
-                          setSelectedOrder(item);
-                          setReviewModalVisible(true);
-                        }}
-                      />
-                    )}
+                  <View style={styles.itemCard}>
+                    <Text style={styles.itemText}>{item.name}</Text>
+                    <Text style={styles.itemText}>Quantity: {item.quantity}</Text>
+                    <Text style={styles.itemText}>Price: ${item.price}</Text>
                   </View>
                 )}
               />
-            </>
+              {item.status === "Delivered" && (
+                <Button
+                  title="Write a Review"
+                  onPress={() => {
+                    setSelectedOrder(item);
+                    setReviewModalVisible(true);
+                  }}
+                />
+              )}
+            </View>
           )}
-        </>
-      ) : (
-        <>
-          {isLogin ? (
-            <>
-              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-              <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-              <Button title="Login" onPress={handleLogin} />
-              <Button title="Switch to Register" onPress={() => setIsLogin(false)} />
-            </>
-          ) : (
-            <>
-              <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
-              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-              <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-              <Button title="Choose Image" onPress={pickImage} />
-              <Button title="Register" onPress={handleRegister} />
-              <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
-            </>
-          )}
-        </>
-      )}
-      {message ? <Text>{message}</Text> : null}
+        />
+      </>
+    );
+  };
+
+  return (
+    <LinearGradient 
+      colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
+      style={styles.gradientBackground}
+    >
+      <View style={styles.container}>
+        {loggedIn ? (
+          <>
+            <Text style={styles.text}>Welcome, {userName}</Text>
+            {profileImage && <Image source={{ uri: profileImage }} style={styles.profileImage} />}
+            <Button title="Logout" onPress={handleLogout} />
+            <Button title={showOrders ? "Hide Orders" : "Show Orders"} onPress={() => setShowOrders(!showOrders)} />
+            {showOrders && renderOrders()}
+          </>
+        ) : (
+          <>
+            {isLogin ? (
+              <>
+                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+                <Button title="Login" onPress={handleLogin} />
+                <Button title="Switch to Register" onPress={() => setIsLogin(false)} />
+              </>
+            ) : (
+              <>
+                <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
+                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+                <Button title="Choose Image" onPress={pickImage} />
+                <Button title="Register" onPress={handleRegister} />
+                <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
+              </>
+            )}
+          </>
+        )}
+        {message ? <Text>{message}</Text> : null}
 
         {/* Review Modal */}
         <Modal
@@ -315,34 +359,33 @@ export default function ProfileScreen() {
           </View>
         </Modal>
         <Toast />
-      </LinearGradient>
-    </View>
+      </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 20,
   },
   gradientBackground: {
     flex: 1,
   },
-  logoContainer: {
+  text: {
+    fontSize: 18,
+    color: '#3E2723',
+    marginBottom: 10,
+  },
+  input: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 40,
-    marginBottom: 1,
-  },
-  logo: {
-    width: 350,
-    height: 190,
-    resizeMode: 'contain',
-  },
-  profileContainer: {
-    flex: 1,
-    padding: 20,
-    marginTop: 10,
+    height: 55,
+    borderRadius: 30,
+    paddingHorizontal: 25,
+    marginBottom: 15,
+    fontSize: 16,
+    color: '#3E2723',
   },
   profileImage: {
     width: 100,
@@ -350,20 +393,35 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     borderWidth: 4,
     borderColor: '#FFFFFF',
-    marginTop: 40,
+    marginVertical: 20,
     alignSelf: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
   },
-  welcomeText: {
-    fontSize: 28,
-    fontWeight: '700',
+  orderCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 16,
+    marginBottom: 15,
+    elevation: 3,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  orderText: {
+    fontSize: 16,
     color: '#3E2723',
-    textAlign: 'center',
-    marginTop: 1,
-    marginBottom: 30,
+  },
+  itemCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEBE9',
+  },
+  itemText: {
+    fontSize: 15,
+    color: '#5D4037',
   },
   button: {
     backgroundColor: 'rgba(62, 39, 35, 0.9)',
@@ -384,121 +442,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     letterSpacing: 0.5,
-  },
-  orderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 16,
-    marginBottom: 15,
-    elevation: 3,
-    shadowColor: '#8B4513',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  orderId: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3E2723',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  orderDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EFEBE9',
-  },
-  orderDate: {
-    color: '#8D6E63',
-    fontSize: 14,
-  },
-  totalPrice: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#3E2723',
-  },
-  itemsList: {
-    marginTop: 12,
-  },
-  itemCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EFEBE9',
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 15,
-    color: '#5D4037',
-    marginBottom: 4,
-  },
-  itemQuantity: {
-    fontSize: 13,
-    color: '#8D6E63',
-  },
-  itemPrice: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#3E2723',
-  },
-  reviewButton: {
-    backgroundColor: '#8B4513',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    alignSelf: 'flex-end',
-    marginTop: 12,
-  },
-  reviewButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  listContainer: {
-    paddingHorizontal: 15,
-    paddingBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#3E2723',
-    marginBottom: 15,
-    marginTop: 10,
-  },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    width: '100%',
-    height: 55,
-    borderRadius: 30,
-    paddingHorizontal: 25,
-    marginBottom: 15,
-    fontSize: 16,
-    color: '#3E2723',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   modalContainer: {
     flex: 1,

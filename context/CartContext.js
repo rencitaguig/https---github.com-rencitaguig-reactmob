@@ -7,6 +7,7 @@ export const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([]);
+  const [onOrderPlaced, setOnOrderPlaced] = useState(null); // Callback for order placement
 
   useEffect(() => {
     loadCart();
@@ -60,6 +61,10 @@ export const CartProvider = ({ children }) => {
       console.log("Order placed:", response.data);
       setCart([]);
       await AsyncStorage.removeItem("cart");
+
+      if (onOrderPlaced) {
+        onOrderPlaced(); // Notify ProfileScreen about the new order
+      }
     } catch (error) {
       console.error("Error placing order:", error.response ? error.response.data : error.message);
     }
@@ -67,7 +72,14 @@ export const CartProvider = ({ children }) => {
 
   return (
     <CartContext.Provider
-      value={{ cart, addToCart, removeFromCart, loadCart, checkout }}
+      value={{
+        cart,
+        addToCart,
+        removeFromCart,
+        loadCart,
+        checkout,
+        setOnOrderPlaced, // Expose the callback setter
+      }}
     >
       {children}
     </CartContext.Provider>
