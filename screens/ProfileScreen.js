@@ -19,7 +19,7 @@ export default function ProfileScreen() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
   const [showOrders, setShowOrders] = useState(true); // State to toggle orders visibility
-  const { orders, fetchOrders } = useContext(OrderContext); // Use OrderContext
+  const [userOrders, setUserOrders] = useState([]); // State for user-specific orders
   const [selectedOrder, setSelectedOrder] = useState(null); // State for selected order
   const [reviewModalVisible, setReviewModalVisible] = useState(false); // State for review modal visibility
   const [rating, setRating] = useState(0); // State for rating
@@ -31,16 +31,34 @@ export default function ProfileScreen() {
       const userId = await AsyncStorage.getItem('userId');
       if (token && userId) {
         setLoggedIn(true);
-        const user = await axios.get(`${BASE_URL}/api/users/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setUserName(user.data.name);
-        setProfileImage(user.data.profileImage);
-        fetchOrders(); // Fetch orders
+        try {
+          const user = await axios.get(`${BASE_URL}/api/users/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setUserName(user.data.name);
+          setProfileImage(user.data.profileImage);
+          fetchUserOrders(userId, token); // Fetch orders for the logged-in user
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        }
       }
     };
     checkLoginStatus();
   }, []);
+
+  const fetchUserOrders = async (userId, token) => {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/orders`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const filteredOrders = response.data.filter(
+        (order) => order.userId._id === userId
+      );
+      setUserOrders(filteredOrders);
+    } catch (error) {
+      console.error("Error fetching user orders:", error);
+    }
+  };
 
   const handleLogin = async () => {
     try {
@@ -185,133 +203,78 @@ export default function ProfileScreen() {
     }
   };
 
+  const renderOrders = () => {
+    if (!userOrders || userOrders.length === 0) {
+      return <Text>No orders found.</Text>;
+    }
+
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
-        style={styles.gradientBackground}
-      >
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../assets/logo.png')} // Make sure to add your logo file
-            style={styles.logo}
-          />
-        </View>
-        
-        {loggedIn ? (
-          <View style={styles.profileContainer}>
-            {profileImage && (
-              <Image 
-                source={{ uri: profileImage }} 
-                style={styles.profileImage} 
-              />
-            )}
-            <Text style={styles.welcomeText}>Welcome, {userName}</Text>
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={handleLogout}
-            >
-              <Text style={styles.buttonText}>Logout</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={() => setShowOrders(!showOrders)}
-            >
-              <Text style={styles.buttonText}>
-                {showOrders ? "Hide Orders" : "Show Orders"}
-              </Text>
-            </TouchableOpacity>
-            
-            {showOrders && (
-              <>
-                <Text style={styles.sectionTitle}>Your Orders</Text>
-                <FlatList
-                  data={orders}
-                  keyExtractor={(item) => item._id ? item._id.toString() : "undefined"}
-                  renderItem={({ item }) => (
-                    <View style={styles.orderCard}>
-                      <View style={styles.orderHeader}>
-                        <Text style={styles.orderId}>Order #{item._id.slice(-6)}</Text>
-                        <View style={[styles.statusBadge, 
-                          { backgroundColor: item.status === "Delivered" ? "#8D6E63" : "#BCAAA4" }
-                        ]}>
-                          <Text style={styles.statusText}>{item.status}</Text>
+      {loggedIn ? (
+        <>
+          <Text style={styles.text}>Welcome, {userName}</Text>
+          {profileImage ? <Image source={{ uri: profileImage }} style={styles.profileImage} /> : null}
+          <Button title="Logout" onPress={handleLogout} />
+          <Button title={showOrders ? "Hide Orders" : "Show Orders"} onPress={() => setShowOrders(!showOrders)} />
+          {showOrders && (
+            <>
+              <Text style={styles.text}>Your Orders:</Text>
+              <FlatList
+                data={orders}
+                keyExtractor={(item) => item._id ? item._id.toString() : "undefined"}
+                renderItem={({ item }) => (
+                  <View style={styles.orderCard}>
+                    <Text style={styles.orderText}>Order ID: {item._id}</Text>
+                    <Text style={styles.orderText}>Total Price: ${item.totalPrice}</Text>
+                    <Text style={styles.orderText}>Status: {item.status}</Text>
+                    <FlatList
+                      data={item.items}
+                      keyExtractor={(item) => item.productId ? item.productId.toString() : "undefined"}
+                      renderItem={({ item }) => (
+                        <View style={styles.itemCard}>
+                          <Text style={styles.itemText}>{item.name}</Text>
+                          <Text style={styles.itemText}>Quantity: {item.quantity}</Text>
+                          <Text style={styles.itemText}>Price: ${item.price}</Text>
                         </View>
-                      </View>
-                      
-                      <View style={styles.orderDetails}>
-                        <Text style={styles.orderDate}>
-                          {new Date(item.createdAt).toLocaleDateString()}
-                        </Text>
-                        <Text style={styles.totalPrice}>₱{item.totalPrice.toFixed(2)}</Text>
-                      </View>
-
-                      <View style={styles.itemsList}>
-                        {item.items.map((orderItem) => (
-                          <View 
-                            key={orderItem.productId} 
-                            style={styles.itemCard}
-                          >
-                            <View style={styles.itemInfo}>
-                              <Text style={styles.itemName}>{orderItem.name}</Text>
-                              <Text style={styles.itemQuantity}>Qty: {orderItem.quantity}</Text>
-                            </View>
-                            <Text style={styles.itemPrice}>₱{orderItem.price}</Text>
-                          </View>
-                        ))}
-                      </View>
-
-                      {item.status === "Delivered" && (
-                        <TouchableOpacity
-                          style={styles.reviewButton}
-                          onPress={() => {
-                            setSelectedOrder(item);
-                            setReviewModalVisible(true);
-                          }}
-                        >
-                          <Text style={styles.reviewButtonText}>Write a Review</Text>
-                        </TouchableOpacity>
                       )}
-                    </View>
-                  )}
-                  contentContainerStyle={styles.listContainer}
-                  showsVerticalScrollIndicator={false}
-                />
-              </>
-            )}
-          </View>
-        ) : (
-          <View style={styles.profileContainer}>
-            {isLogin ? (
-              <>
-                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-                <TouchableOpacity style={styles.button} onPress={handleLogin}>
-                  <Text style={styles.buttonText}>Login</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.button} onPress={() => setIsLogin(false)}>
-                  <Text style={styles.buttonText}>Switch to Register</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
-                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-                <TouchableOpacity style={styles.button} onPress={pickImage}>
-                  <Text style={styles.buttonText}>Choose Image</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.button} onPress={handleRegister}>
-                  <Text style={styles.buttonText}>Register</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.button} onPress={() => setIsLogin(true)}>
-                  <Text style={styles.buttonText}>Switch to Login</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        )}
-        {message ? <Text>{message}</Text> : null}
+                    />
+                    {item.status === "Delivered" && (
+                      <Button
+                        title="Write a Review"
+                        onPress={() => {
+                          setSelectedOrder(item);
+                          setReviewModalVisible(true);
+                        }}
+                      />
+                    )}
+                  </View>
+                )}
+              />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {isLogin ? (
+            <>
+              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+              <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+              <Button title="Login" onPress={handleLogin} />
+              <Button title="Switch to Register" onPress={() => setIsLogin(false)} />
+            </>
+          ) : (
+            <>
+              <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
+              <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+              <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+              <Button title="Choose Image" onPress={pickImage} />
+              <Button title="Register" onPress={handleRegister} />
+              <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
+            </>
+          )}
+        </>
+      )}
+      {message ? <Text>{message}</Text> : null}
 
         {/* Review Modal */}
         <Modal

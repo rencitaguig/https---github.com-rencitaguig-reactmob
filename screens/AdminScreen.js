@@ -1,67 +1,28 @@
 import React, { useState, useEffect } from "react";
 import { View, TextInput, Button, Text, FlatList, TouchableOpacity, StyleSheet, ScrollView, Dimensions, Platform } from "react-native";
+import React, { useState, useEffect, useContext } from "react";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Button, ScrollView } from "react-native";
 import { Picker } from '@react-native-picker/picker';
-import * as ImagePicker from "expo-image-picker";
-import axios from "axios";
-import { useSelector, useDispatch } from "react-redux";
-import { fetchOrders, updateOrderStatus } from "../store/orderSlice";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import BASE_URL from "../config";
+import { OrderContext } from "../context/OrderContext";
 import { LinearGradient } from 'expo-linear-gradient';
 
 const windowHeight = Dimensions.get('window').height;
 
 export default function AdminScreen() {
-  const dispatch = useDispatch();
-  const { orders, loading: ordersLoading } = useSelector((state) => state.orders);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [category, setCategory] = useState("");
-  const [image, setImage] = useState(null);
-  const [message, setMessage] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [status, setStatus] = useState("Pending");
+  const { orders, fetchOrders, updateOrderStatus } = useContext(OrderContext);
+  const [message, setMessage] = useState("");
   const [updateMessage, setUpdateMessage] = useState("");
 
   useEffect(() => {
-    const fetchData = async () => {
-      const token = await AsyncStorage.getItem("token");
-      dispatch(fetchOrders(token));
-    };
-    fetchData();
-  }, [dispatch]);
+    fetchOrders(); // Fetch all orders
+  }, []);
 
-  const handleImagePick = async () => {
-    try {
-      let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 1,
-      });
-
-      if (!result.cancelled) {
-        setImage(result);
-      }
-    } catch (error) {
-      console.error("Error picking image:", error);
-      setMessage("Failed to pick image.");
-    }
-  };
-
-  const handleSubmit = async () => {
-    const formData = new FormData();
-    formData.append("name", name);
-    formData.append("description", description);
-    formData.append("price", price);
-    formData.append("category", category);
-    if (image) {
-      formData.append("image", {
-        uri: image.uri,
-        type: 'image/jpeg',
-        name: image.uri.split('/').pop(),
-      });
+  const handleUpdateOrderStatus = async () => {
+    if (!selectedOrder) {
+      setMessage("Please select an order.");
+      return;
     }
 
     try {
@@ -110,6 +71,14 @@ export default function AdminScreen() {
         return '#757575';
     }
   };
+    await updateOrderStatus(selectedOrder, status);
+    setMessage("Order status updated successfully!");
+  };
+
+  const renderContent = () => {
+    if (!orders || orders.length === 0) {
+      return <Text>No orders available.</Text>;
+    }
 
   return (
     <LinearGradient
