@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext } from "react";
-import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, Modal, ScrollView } from "react-native";
+import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, Modal, ScrollView, RefreshControl } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchProducts } from "../store/productSlice";
 import { fetchReviews, updateReview, deleteReview } from "../store/reviewSlice";
@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CartContext } from "../context/CartContext";
 import { LinearGradient } from 'expo-linear-gradient';
 import { Dimensions } from 'react-native';
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function HomeScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -20,6 +21,7 @@ export default function HomeScreen({ navigation }) {
   const [editComment, setEditComment] = useState("");
   const [selectedReview, setSelectedReview] = useState(null);
   const { addToCart } = useContext(CartContext);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleAddToCart = async (item) => {
     await addToCart(item);
@@ -64,8 +66,16 @@ export default function HomeScreen({ navigation }) {
     product.price.toString().includes(searchQuery)
   );
 
-  useEffect(() => {
-    dispatch(fetchProducts());
+  useFocusEffect(
+    React.useCallback(() => {
+      dispatch(fetchProducts());
+    }, [dispatch])
+  );
+
+  const handleRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await dispatch(fetchProducts());
+    setRefreshing(false);
   }, [dispatch]);
 
   return (
@@ -85,6 +95,14 @@ export default function HomeScreen({ navigation }) {
         keyExtractor={(item) => `product-${item._id}`} // Added prefix for uniqueness
         numColumns={2}
         contentContainerStyle={styles.listContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#8B4513']}
+            tintColor="#8B4513"
+          />
+        }
         renderItem={({ item }) => (
           <TouchableOpacity 
             style={styles.card} 

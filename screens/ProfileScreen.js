@@ -38,6 +38,10 @@ export default function ProfileScreen() {
   const [reviewModalVisible, setReviewModalVisible] = useState(false); // Review modal visibility
   const [rating, setRating] = useState(0); // Rating state
   const [comment, setComment] = useState(""); // Comment state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editImage, setEditImage] = useState(null);
 
   const { setOnOrderPlaced } = useContext(CartContext); // Access CartContext
   const { setUserRole } = useContext(AuthContext); // Access AuthContext
@@ -129,36 +133,45 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleRegister = async () => {
-    const formData = new FormData();
-    formData.append("name", name);
-    formData.append("email", email);
-    formData.append("password", password);
-    if (image) {
-      const imageData = new FormData();
-      imageData.append("file", {
-        uri: image.uri ? image.uri.replace("file://", "") : "",
-        type: 'image/jpeg',
-        name: image.uri ? image.uri.split('/').pop() : 'image.jpg',
-      });
-      imageData.append("upload_preset", "ml_default");
-
-      try {
-        const res = await axios.post("https://api.cloudinary.com/v1_1/dv4vzq7pv/image/upload", imageData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        formData.append("profileImage", res.data.secure_url);
-      } catch (error) {
-        console.error("Error uploading image to Cloudinary:", error.response ? error.response.data : error.message);
-        setMessage("Error uploading image.");
-        return;
-      }
-    }
-
+  const pickImage = async () => {
     try {
-      await axios.post(`${BASE_URL}/api/auth/register`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
       });
+
+      if (!result.canceled) {
+        setImage({
+          uri: result.assets[0].uri,
+          base64: result.assets[0].base64
+        });
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      setMessage("Failed to pick image.");
+    }
+  };
+
+  const handleRegister = async () => {
+    try {
+      const formData = {
+        name,
+        email,
+        password,
+      };
+
+      // Add base64 image if available
+      if (image && image.base64) {
+        formData.profileImage = `data:image/jpeg;base64,${image.base64}`;
+      }
+
+      await axios.post(`${BASE_URL}/api/auth/register`, formData, {
+        headers: { "Content-Type": "application/json" },
+      });
+
       Toast.show({
         type: 'success',
         text1: 'Success',
@@ -195,24 +208,6 @@ export default function ProfileScreen() {
     });
   };
 
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-      });
-
-      if (!result.canceled) { 
-        setImage(result.assets[0]);
-      }
-    } catch (error) {
-      console.error("Error picking image:", error);
-      setMessage("Failed to pick image.");
-    }
-  };
-
   const handleReviewSubmit = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -245,6 +240,150 @@ export default function ProfileScreen() {
       console.error("Error submitting review:", error.response ? error.response.data : error.message);
     }
   };
+
+  const handleEditProfile = () => {
+    setEditName(userName);
+    setEditEmail(email);
+    setIsEditing(true);
+  };
+
+  const handleUpdateProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userId = await AsyncStorage.getItem('userId');
+      
+      const updateData = {
+        name: editName,
+        email: editEmail,
+      };
+
+      if (editImage) {
+        updateData.profileImage = `data:image/jpeg;base64,${editImage.base64}`;
+      }
+
+      const response = await axios.put(
+        `${BASE_URL}/api/auth/profile`,
+        updateData,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      setUserName(response.data.name);
+      setEmail(response.data.email);
+      if (response.data.profileImage) {
+        setProfileImage(response.data.profileImage);
+      }
+      
+      setIsEditing(false);
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Profile updated successfully! 👋',
+        visibilityTime: 3000,
+        position: 'top',
+      });
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to update profile',
+        visibilityTime: 3000,
+        position: 'top',
+      });
+    }
+  };
+
+  const pickEditImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+        base64: true,
+      });
+
+      if (!result.canceled) {
+        setEditImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to pick image',
+        visibilityTime: 3000,
+        position: 'top',
+      });
+    }
+  };
+
+  const renderEditProfile = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={isEditing}
+      onRequestClose={() => setIsEditing(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Edit Profile</Text>
+          
+          <TouchableOpacity onPress={pickEditImage} style={styles.imagePickerButton}>
+            {editImage ? (
+              <Image source={{ uri: editImage.uri }} style={styles.editImagePreview} />
+            ) : profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.editImagePreview} />
+            ) : (
+              <Text style={styles.imagePickerText}>Choose Profile Picture</Text>
+            )}
+          </TouchableOpacity>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Name"
+            value={editName}
+            onChangeText={setEditName}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            value={editEmail}
+            onChangeText={setEditEmail}
+            keyboardType="email-address"
+          />
+          
+          <TouchableOpacity style={styles.button} onPress={handleUpdateProfile}>
+            <Text style={styles.buttonText}>Update Profile</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: '#D7CCC8' }]} 
+            onPress={() => setIsEditing(false)}
+          >
+            <Text style={[styles.buttonText, { color: '#3E2723' }]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderRegistrationForm = () => (
+    <>
+      <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
+      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+      <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+        <Text style={styles.imagePickerText}>Choose Profile Picture</Text>
+      </TouchableOpacity>
+      {image && (
+        <Image source={{ uri: image.uri }} style={styles.imagePreview} />
+      )}
+      <Button title="Register" onPress={handleRegister} />
+      <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
+    </>
+  );
 
   const renderOrders = () => {
     if (!userOrders || userOrders.length === 0) {
@@ -297,11 +436,19 @@ export default function ProfileScreen() {
       <View style={styles.container}>
         {loggedIn ? (
           <>
-            <Text style={styles.text}>Welcome, {userName}</Text>
+            <View style={styles.headerContainer}>
+              <Text style={styles.text}>Welcome, {userName}</Text>
+              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                <Text style={styles.buttonText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
             {profileImage && <Image source={{ uri: profileImage }} style={styles.profileImage} />}
-            <Button title="Logout" onPress={handleLogout} />
+            <TouchableOpacity style={styles.button} onPress={handleEditProfile}>
+              <Text style={styles.buttonText}>Edit Profile</Text>
+            </TouchableOpacity>
             <Button title={showOrders ? "Hide Orders" : "Show Orders"} onPress={() => setShowOrders(!showOrders)} />
             {showOrders && renderOrders()}
+            {renderEditProfile()}
           </>
         ) : (
           <>
@@ -313,14 +460,7 @@ export default function ProfileScreen() {
                 <Button title="Switch to Register" onPress={() => setIsLogin(false)} />
               </>
             ) : (
-              <>
-                <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
-                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-                <Button title="Choose Image" onPress={pickImage} />
-                <Button title="Register" onPress={handleRegister} />
-                <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
-              </>
+              renderRegistrationForm()
             )}
           </>
         )}
@@ -475,5 +615,42 @@ const styles = StyleSheet.create({
     color: '#3E2723',
     marginBottom: 25,
     textAlign: 'center',
+  },
+  headerContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  logoutButton: {
+    backgroundColor: '#D32F2F',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    marginTop: 10,
+  },
+  editImagePreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 20,
+  },
+  imagePickerButton: {
+    backgroundColor: '#8B4513',
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 10,
+    alignItems: 'center',
+  },
+  imagePickerText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  imagePreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginVertical: 10,
+    alignSelf: 'center',
   },
 });

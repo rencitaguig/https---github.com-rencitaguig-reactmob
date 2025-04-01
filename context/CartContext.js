@@ -65,6 +65,11 @@ export const CartProvider = ({ children }) => {
       if (onOrderPlaced) {
         onOrderPlaced(); // Notify ProfileScreen about the new order
       }
+
+      // Import and use OrderContext to refresh orders
+      const { fetchOrders } = require('./OrderContext');
+      fetchOrders();
+      
     } catch (error) {
       console.error("Error placing order:", error.response ? error.response.data : error.message);
     }
