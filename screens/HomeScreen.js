@@ -22,6 +22,8 @@ export default function HomeScreen({ navigation }) {
   const [selectedReview, setSelectedReview] = useState(null);
   const { addToCart } = useContext(CartContext);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [categories, setCategories] = useState(['All']);
 
   const handleAddToCart = async (item) => {
     await addToCart(item);
@@ -61,10 +63,19 @@ export default function HomeScreen({ navigation }) {
     dispatch(deleteReview({ reviewId, token }));
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.price.toString().includes(searchQuery)
-  );
+  useEffect(() => {
+    if (products.length > 0) {
+      const uniqueCategories = ['All', ...new Set(products.map(product => product.category))];
+      setCategories(uniqueCategories);
+    }
+  }, [products]);
+
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.price.toString().includes(searchQuery);
+    const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   useFocusEffect(
     React.useCallback(() => {
@@ -78,6 +89,34 @@ export default function HomeScreen({ navigation }) {
     setRefreshing(false);
   }, [dispatch]);
 
+  const renderCategoryFilter = () => (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.categoryContainer}
+    >
+      {categories.map((category) => (
+        <TouchableOpacity
+          key={category}
+          style={[
+            styles.categoryButton,
+            selectedCategory === category && styles.categoryButtonActive
+          ]}
+          onPress={() => setSelectedCategory(category)}
+        >
+          <Text
+            style={[
+              styles.categoryButtonText,
+              selectedCategory === category && styles.categoryButtonTextActive
+            ]}
+          >
+            {category}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+
   return (
     <LinearGradient
       colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
@@ -90,6 +129,7 @@ export default function HomeScreen({ navigation }) {
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
+      {renderCategoryFilter()}
       <FlatList
         data={filteredProducts}
         keyExtractor={(item) => `product-${item._id}`} // Added prefix for uniqueness
@@ -223,6 +263,39 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
+  },
+  categoryContainer: {
+    marginBottom: 15,
+    paddingHorizontal: 5,
+    height: 44, // Added fixed height
+  },
+  categoryButton: {
+    paddingHorizontal: 20,
+    height: 36, // Fixed height for all states
+    marginHorizontal: 5,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    justifyContent: 'center', // Center text vertically
+    alignItems: 'center', // Center text horizontally
+    minWidth: 80, // Minimum width to prevent squishing
+  },
+  categoryButtonActive: {
+    backgroundColor: '#8B4513',
+    height: 36, // Same height as inactive state
+  },
+  categoryButtonText: {
+    color: '#8B4513',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center', // Center text
+  },
+  categoryButtonTextActive: {
+    color: '#FFFFFF',
   },
   card: { 
     flex: 1, 
