@@ -7,16 +7,20 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
+  TextInput,
+  Alert,
 } from "react-native";
 import { CartContext } from "../context/CartContext";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSelector } from 'react-redux';
 
 export default function CartScreen() {
   const { cart, removeFromCart, checkout } = useContext(CartContext);
   const [modalVisible, setModalVisible] = useState(false);
-
-  const totalPrice = cart.reduce((sum, item) => sum + item.price, 0);
+  const [discountCode, setDiscountCode] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState(null);
+  const { discounts } = useSelector((state) => state.discounts);
 
   const handleCheckout = async () => {
     const userId = await AsyncStorage.getItem('userId'); // Get user ID from async storage
@@ -26,6 +30,30 @@ export default function CartScreen() {
     }
     checkout(userId);
     setModalVisible(false);
+  };
+
+  const applyDiscount = () => {
+    const discount = discounts.find(
+      d => d.code === discountCode.trim().toUpperCase() && 
+      d.isActive && 
+      new Date(d.expiryDate) > new Date()
+    );
+
+    if (discount) {
+      setAppliedDiscount(discount);
+      setDiscountCode('');
+    } else {
+      Alert.alert('Invalid Code', 'Please enter a valid discount code');
+    }
+  };
+
+  const calculateFinalPrice = () => {
+    const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+    if (appliedDiscount) {
+      const discountAmount = (subtotal * appliedDiscount.percentage) / 100;
+      return subtotal - discountAmount;
+    }
+    return subtotal;
   };
 
   return (
@@ -62,12 +90,42 @@ export default function CartScreen() {
           />
 
           <View style={styles.checkoutContainer}>
+            <View style={styles.discountSection}>
+              <TextInput
+                style={styles.discountInput}
+                placeholder="Enter discount code"
+                value={discountCode}
+                onChangeText={setDiscountCode}
+                placeholderTextColor="#8D6E63"
+              />
+              <TouchableOpacity 
+                style={styles.applyButton}
+                onPress={applyDiscount}
+              >
+                <Text style={styles.applyButtonText}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+
+            {appliedDiscount && (
+              <View style={styles.discountInfo}>
+                <Text style={styles.discountText}>
+                  Discount applied: {appliedDiscount.percentage}% OFF
+                </Text>
+                <TouchableOpacity 
+                  style={styles.removeDiscountButton}
+                  onPress={() => setAppliedDiscount(null)}
+                >
+                  <Text style={styles.removeDiscountText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <TouchableOpacity
               style={styles.checkoutButton}
               onPress={() => setModalVisible(true)}
             >
               <Text style={styles.checkoutText}>
-                Checkout • ₱{totalPrice.toFixed(2)}
+                Checkout • ₱{calculateFinalPrice().toFixed(2)}
               </Text>
             </TouchableOpacity>
           </View>
@@ -80,9 +138,24 @@ export default function CartScreen() {
             <View style={styles.modalContainer}>
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Order Summary</Text>
-                <Text style={styles.modalPrice}>
-                  Total: ${totalPrice.toFixed(2)}
-                </Text>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Subtotal:</Text>
+                  <Text style={styles.summaryValue}>
+                    ₱{cart.reduce((sum, item) => sum + item.price, 0).toFixed(2)}
+                  </Text>
+                </View>
+                {appliedDiscount && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Discount ({appliedDiscount.percentage}%):</Text>
+                    <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>
+                      -₱{((cart.reduce((sum, item) => sum + item.price, 0) * appliedDiscount.percentage) / 100).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+                <View style={[styles.summaryRow, styles.totalRow]}>
+                  <Text style={styles.totalLabel}>Total:</Text>
+                  <Text style={styles.totalValue}>₱{calculateFinalPrice().toFixed(2)}</Text>
+                </View>
                 <TouchableOpacity
                   style={styles.confirmButton}
                   onPress={handleCheckout}
@@ -181,6 +254,55 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  discountSection: {
+    flexDirection: 'row',
+    marginBottom: 15,
+    gap: 10,
+  },
+  discountInput: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#D7CCC8',
+    color: '#3E2723',
+  },
+  applyButton: {
+    backgroundColor: '#8B4513',
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    justifyContent: 'center',
+  },
+  applyButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  discountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F5F5F5',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 15,
+  },
+  discountText: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  removeDiscountButton: {
+    padding: 8,
+  },
+  removeDiscountText: {
+    color: '#F44336',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   checkoutButton: {
     backgroundColor: '#8B4513',
     padding: 18,
@@ -210,11 +332,35 @@ const styles = StyleSheet.create({
     color: '#3E2723',
     marginBottom: 15,
   },
-  modalPrice: {
-    fontSize: 28,
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  summaryLabel: {
+    fontSize: 16,
+    color: '#5D4037',
+  },
+  summaryValue: {
+    fontSize: 16,
+    color: '#3E2723',
+    fontWeight: '600',
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    borderColor: '#D7CCC8',
+    paddingTop: 10,
+    marginTop: 10,
+  },
+  totalLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#3E2723',
+  },
+  totalValue: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#8B4513',
-    marginBottom: 25,
   },
   confirmButton: {
     backgroundColor: '#8B4513',

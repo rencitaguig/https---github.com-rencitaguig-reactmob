@@ -6,6 +6,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 import AdminScreen from "../screens/AdminScreen";
 import { Ionicons } from "@expo/vector-icons";
 import { AuthContext } from "../context/AuthContext";
+import DiscountScreen from "../screens/DiscountScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -55,6 +56,15 @@ export default function BottomTabNavigator() {
         options={{
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cart" color={color} size={26} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Discounts"
+        component={DiscountScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="pricetag" color={color} size={26} />
           ),
         }}
       />

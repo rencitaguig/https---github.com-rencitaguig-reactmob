@@ -112,6 +112,19 @@ export default function HomeScreen({ navigation }) {
     });
   };
 
+  const getBannerColor = (banner) => {
+    switch (banner) {
+      case 'new':
+        return '#4CAF50';
+      case 'sale':
+        return '#F44336';
+      case 'top':
+        return '#2196F3';
+      default:
+        return '#E0E0E0';
+    }
+  };
+
   return (
     <LinearGradient
       colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
@@ -213,7 +226,7 @@ export default function HomeScreen({ navigation }) {
 
       <FlatList
         data={filteredProducts}
-        keyExtractor={(item) => `product-${item._id}`} // Added prefix for uniqueness
+        keyExtractor={(item) => `product-${item._id}`}
         numColumns={2}
         contentContainerStyle={styles.listContainer}
         refreshControl={
@@ -229,7 +242,14 @@ export default function HomeScreen({ navigation }) {
             style={styles.card} 
             onPress={() => handleProductSelect(item)}
           >
-            <Image source={{ uri: item.image }} style={styles.image} />
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: item.image }} style={styles.image} />
+              {item.banner && item.banner !== 'none' && (
+                <View style={[styles.bannerTag, { backgroundColor: getBannerColor(item.banner) }]}>
+                  <Text style={styles.bannerTagText}>{item.banner.toUpperCase()}</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.title}>{item.name}</Text>
             <Text style={styles.price}>₱{item.price}</Text>
             <TouchableOpacity 
@@ -253,7 +273,7 @@ export default function HomeScreen({ navigation }) {
               <Image source={{ uri: selectedProduct.image }} style={styles.modalImage} />
               <Text style={styles.modalTitle}>{selectedProduct.name}</Text>
               <Text style={styles.modalDescription}>{selectedProduct.description}</Text>
-              <Text style={styles.modalPrice}>${selectedProduct.price}</Text>
+              <Text style={styles.modalPrice}>₱{selectedProduct.price}</Text>
               <Text style={styles.modalTitle}>Reviews:</Text>
               <FlatList
                 data={reviews}
@@ -556,11 +576,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
+  imageContainer: {
+    position: 'relative',
+  },
   image: { 
     width: "100%", 
     height: 150, 
     resizeMode: "cover",
     borderRadius: 10,
+  },
+  bannerTag: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
+  },
+  bannerTagText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   title: { 
     fontSize: 16, 

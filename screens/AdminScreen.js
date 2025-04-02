@@ -28,6 +28,9 @@ import { Camera } from 'expo-camera';
 
 const windowHeight = Dimensions.get('window').height;
 
+// Add this constant at the top of your file
+const BANNER_OPTIONS = ['none', 'new', 'sale', 'top'];
+
 export default function AdminScreen() {
   const dispatch = useDispatch();
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -47,6 +50,7 @@ export default function AdminScreen() {
   const [productImage, setProductImage] = useState(null);
   const [createProductMessage, setCreateProductMessage] = useState("");
   const [cameraPermission, setCameraPermission] = useState(null);
+  const [productBanner, setProductBanner] = useState("");
 
   useEffect(() => {
     fetchProducts();
@@ -195,6 +199,7 @@ export default function AdminScreen() {
         description: productDescription,
         price: productPrice,
         category: productCategory,
+        banner: productBanner,
       };
 
       // Check image size before adding to request
@@ -223,6 +228,7 @@ export default function AdminScreen() {
       setProductPrice("");
       setProductCategory("");
       setProductImage(null);
+      setProductBanner("");
       setSelectedProduct(null);
       setIsEditing(false);
       setTimeout(() => setCreateProductMessage(""), 3000);
@@ -257,6 +263,7 @@ export default function AdminScreen() {
     setProductDescription(product.description || '');
     setProductPrice(product.price.toString());
     setProductCategory(product.category);
+    setProductBanner(product.banner);
     setIsEditing(true);
   };
 
@@ -275,74 +282,104 @@ export default function AdminScreen() {
     }
   };
 
-  const renderProductsList = () => {
-    return (
-      <FlatList
-        data={products}
-        keyExtractor={(item) => item._id}
-        renderItem={({ item }) => (
-          <View style={styles.productCard}>
-            {item.image && (
-              <Image 
-                source={{ uri: item.image.startsWith('data:') ? item.image : `data:image/jpeg;base64,${item.image}` }} 
-                style={styles.productImage} 
-              />
-            )}
-            <View style={styles.productInfo}>
-              <Text style={styles.productName}>{item.name}</Text>
-              <Text style={styles.productPrice}>₱{item.price}</Text>
-              <Text style={styles.productCategory}>{item.category}</Text>
-            </View>
-            <View style={styles.productActions}>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
-                onPress={() => handleEditProduct(item)}
-              >
-                <Text style={styles.actionButtonText}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#F44336' }]}
-                onPress={() => handleDeleteProduct(item._id)}
-              >
-                <Text style={styles.actionButtonText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      />
-    );
+  const getBannerColor = (banner) => {
+    switch (banner) {
+      case 'new':
+        return '#4CAF50';
+      case 'sale':
+        return '#F44336';
+      case 'top':
+        return '#2196F3';
+      default:
+        return '#E0E0E0';
+    }
   };
+
+  const renderProductsList = () => (
+    <FlatList
+      data={products}
+      keyExtractor={(item) => item._id}
+      renderItem={({ item }) => (
+        <View style={styles.productCard}>
+          {item.image && (
+            <Image 
+              source={{ uri: item.image.startsWith('data:') ? item.image : `data:image/jpeg;base64,${item.image}` }} 
+              style={styles.productImage} 
+            />
+          )}
+          <View style={styles.productInfo}>
+            <Text style={styles.productName}>{item.name}</Text>
+            <Text style={styles.productPrice}>₱{item.price}</Text>
+            <Text style={styles.productCategory}>{item.category}</Text>
+            <Text style={styles.productBanner}>{item.banner}</Text>
+           
+          </View>
+          <View style={styles.productActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+              onPress={() => handleEditProduct(item)}
+            >
+              <Text style={styles.actionButtonText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: '#F44336' }]}
+              onPress={() => handleDeleteProduct(item._id)}
+            >
+              <Text style={styles.actionButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    />
+  );
 
   const renderProductForm = () => (
     <View style={styles.createProductSection}>
       <Text style={styles.sectionTitle}>
         {isEditing ? 'Edit Product' : 'Create New Product'}
       </Text>
+      
       <TextInput
         style={styles.input}
         placeholder="Product Name"
         value={productName}
         onChangeText={setProductName}
+        placeholderTextColor="#8D6E63"
       />
+      
       <TextInput
         style={styles.input}
         placeholder="Product Description"
         value={productDescription}
         onChangeText={setProductDescription}
+        placeholderTextColor="#8D6E63"
       />
+      
       <TextInput
         style={styles.input}
         placeholder="Product Price"
         value={productPrice}
         onChangeText={setProductPrice}
         keyboardType="numeric"
+        placeholderTextColor="#8D6E63"
       />
+      
       <TextInput
         style={styles.input}
         placeholder="Product Category"
         value={productCategory}
         onChangeText={setProductCategory}
+        placeholderTextColor="#8D6E63"
       />
+      
+      <TextInput
+        style={styles.input}
+        placeholder="Promotional Banner (none, new, sale, top)"
+        value={productBanner}
+        onChangeText={(text) => setProductBanner(text.toLowerCase())}
+        placeholderTextColor="#8D6E63"
+      />
+
       <View style={styles.imageButtonsContainer}>
         <TouchableOpacity 
           style={[styles.imageButton, { marginRight: 5 }]} 
@@ -516,6 +553,7 @@ export default function AdminScreen() {
                       <Text style={styles.productName}>{item.name}</Text>
                       <Text style={styles.productPrice}>₱{item.price}</Text>
                       <Text style={styles.productCategory}>{item.category}</Text>
+                      <Text style={styles.productBanner}>{item.banner}</Text>
                     </View>
                     <View style={styles.productActions}>
                       <TouchableOpacity
@@ -754,9 +792,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     borderRadius: 12,
     marginVertical: 10,
-    padding: 10,
+    padding: 15,
     borderWidth: 1,
     borderColor: '#D7CCC8',
+    fontSize: 16,
+    color: '#3E2723',
   },
   createButton: {
     backgroundColor: '#8B4513',
@@ -812,5 +852,78 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  bannerContainer: {
+    marginVertical: 10,
+  },
+  bannerLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3E2723',
+    marginBottom: 5,
+  },
+  bannerOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  bannerButton: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 8,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  bannerButtonActive: {
+    borderWidth: 2,
+    borderColor: '#FFF',
+  },
+  bannerButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bannerButtonTextActive: {
+    fontWeight: '700',
+  },
+  bannerTag: {
+    marginTop: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  bannerTagText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  bannerPickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 15,
+  },
+  bannerOption: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#D7CCC8',
+  },
+  bannerOptionActive: {
+    borderColor: '#FFF',
+    borderWidth: 2,
+  },
+  bannerOptionText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3E2723',
+    marginBottom: 8,
+    marginTop: 15,
   },
 });
