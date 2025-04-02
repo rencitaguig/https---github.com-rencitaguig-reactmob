@@ -20,10 +20,11 @@ import { ProductContext } from "../context/ProductContext";
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import * as ImagePicker from "expo-image-picker";
-import * as ImageManipulator from 'expo-image-manipulator'; // Add this import
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useFocusEffect } from "@react-navigation/native";
 import { useDispatch } from 'react-redux';
 import { fetchProducts as fetchHomeProducts } from '../store/productSlice';
+import { Camera } from 'expo-camera';
 
 const windowHeight = Dimensions.get('window').height;
 
@@ -45,15 +46,19 @@ export default function AdminScreen() {
   const [productCategory, setProductCategory] = useState("");
   const [productImage, setProductImage] = useState(null);
   const [createProductMessage, setCreateProductMessage] = useState("");
+  const [cameraPermission, setCameraPermission] = useState(null);
 
   useEffect(() => {
     fetchProducts();
     (async () => {
-      // Request permission to access media library
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Sorry, we need camera roll permissions to upload images!');
+      // Request permissions for both camera and media library
+      const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
+      
+      if (mediaStatus !== 'granted' || cameraStatus !== 'granted') {
+        alert('Sorry, we need camera and media library permissions!');
       }
+      setCameraPermission(cameraStatus === 'granted');
     })();
   }, []);
 
@@ -90,6 +95,24 @@ export default function AdminScreen() {
     }
   };
 
+  const compressAndResizeImage = async (imageUri) => {
+    try {
+      const manipulatedImage = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ resize: { width: 500 } }], // Reduced width to 500
+        { 
+          compress: 0.5, // Increased compression (50%)
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: true
+        }
+      );
+      return manipulatedImage;
+    } catch (error) {
+      console.error("Error processing image:", error);
+      throw error;
+    }
+  };
+
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -100,21 +123,56 @@ export default function AdminScreen() {
       });
 
       if (!result.canceled) {
-        // Compress the image
-        const manipulatedImage = await ImageManipulator.manipulateAsync(
-          result.assets[0].uri,
-          [{ resize: { width: 800 } }], // Resize to max width of 800
-          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-        );
+        const compressedImage = await compressAndResizeImage(result.assets[0].uri);
+        
+        // Check file size before setting
+        const base64Length = compressedImage.base64.length;
+        const fileSizeInMB = (base64Length * (3/4)) / (1024*1024);
+        
+        if (fileSizeInMB > 1) { // If larger than 1MB
+          throw new Error('Image size too large. Please choose a smaller image.');
+        }
 
         setProductImage({
-          uri: manipulatedImage.uri,
-          base64: manipulatedImage.base64
+          uri: compressedImage.uri,
+          base64: compressedImage.base64
         });
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      setCreateProductMessage("Failed to pick image");
+      // Show error message to user
+      setCreateProductMessage(error.message || "Failed to pick image. Please try again.");
+    }
+  };
+
+  const takePicture = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.5,
+      });
+
+      if (!result.canceled) {
+        const compressedImage = await compressAndResizeImage(result.assets[0].uri);
+        
+        // Check file size before setting
+        const base64Length = compressedImage.base64.length;
+        const fileSizeInMB = (base64Length * (3/4)) / (1024*1024);
+        
+        if (fileSizeInMB > 1) {
+          throw new Error('Image size too large. Please choose a smaller image.');
+        }
+
+        setProductImage({
+          uri: compressedImage.uri,
+          base64: compressedImage.base64
+        });
+      }
+    } catch (error) {
+      console.error("Error taking picture:", error);
+      setCreateProductMessage(error.message || "Failed to take picture. Please try again.");
     }
   };
 
@@ -126,6 +184,7 @@ export default function AdminScreen() {
         return;
       }
 
+      // Validate inputs
       if (!productName || !productPrice || !productCategory) {
         setCreateProductMessage("Name, price, and category are required.");
         return;
@@ -138,8 +197,15 @@ export default function AdminScreen() {
         category: productCategory,
       };
 
-      // Add base64 image if available
-      if (productImage && productImage.base64) {
+      // Check image size before adding to request
+      if (productImage?.base64) {
+        const base64Length = productImage.base64.length;
+        const fileSizeInMB = (base64Length * (3/4)) / (1024*1024);
+        
+        if (fileSizeInMB > 1) {
+          setCreateProductMessage("Image size too large. Please choose a smaller image.");
+          return;
+        }
         productData.image = `data:image/jpeg;base64,${productImage.base64}`;
       }
 
@@ -151,7 +217,7 @@ export default function AdminScreen() {
         setCreateProductMessage("Product created successfully!");
       }
 
-      // Clear form and refresh products in both screens
+      // Clear form and refresh
       setProductName("");
       setProductDescription("");
       setProductPrice("");
@@ -161,10 +227,13 @@ export default function AdminScreen() {
       setIsEditing(false);
       setTimeout(() => setCreateProductMessage(""), 3000);
       await fetchProducts();
-      dispatch(fetchHomeProducts()); // Refresh products in HomeScreen
+      dispatch(fetchHomeProducts());
 
     } catch (error) {
-      setCreateProductMessage(isEditing ? "Failed to update product." : "Failed to create product.");
+      const errorMessage = error.response?.status === 413 
+        ? "Image size too large. Please choose a smaller image."
+        : isEditing ? "Failed to update product." : "Failed to create product.";
+      setCreateProductMessage(errorMessage);
       console.error("Error with product:", error);
     }
   };
@@ -274,9 +343,20 @@ export default function AdminScreen() {
         value={productCategory}
         onChangeText={setProductCategory}
       />
-      <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-        <Text style={styles.imagePickerText}>Choose Image</Text>
-      </TouchableOpacity>
+      <View style={styles.imageButtonsContainer}>
+        <TouchableOpacity 
+          style={[styles.imageButton, { marginRight: 5 }]} 
+          onPress={pickImage}
+        >
+          <Text style={styles.imageButtonText}>Choose from Gallery</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.imageButton, { marginLeft: 5 }]} 
+          onPress={takePicture}
+        >
+          <Text style={styles.imageButtonText}>Take Photo</Text>
+        </TouchableOpacity>
+      </View>
       {productImage && (
         <Image
           source={{ uri: productImage.uri }}
@@ -311,7 +391,10 @@ export default function AdminScreen() {
             ]}
             onPress={() => setShowSection('orders')}
           >
-            <Text style={styles.segmentButtonText}>Manage Orders</Text>
+            <Text style={[
+              styles.segmentButtonText,
+              showSection === 'orders' && { color: '#FFF' }
+            ]}>Manage Orders</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -320,20 +403,26 @@ export default function AdminScreen() {
             ]}
             onPress={() => setShowSection('products')}
           >
-            <Text style={styles.segmentButtonText}>Manage Products</Text>
+            <Text style={[
+              styles.segmentButtonText,
+              showSection === 'products' && { color: '#FFF' }
+            ]}>Manage Products</Text>
           </TouchableOpacity>
         </View>
 
-        {showSection === 'orders' ? (
-          <ScrollView 
-            style={styles.scrollView}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-            nestedScrollEnabled={true}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-            }
-          >
+        <ScrollView
+          style={styles.mainScrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={handleRefresh}
+              colors={['#8B4513']}
+              tintColor="#8B4513"
+            />
+          }
+        >
+          {showSection === 'orders' ? (
             <View style={styles.orderStatusContainer}>
               <Text style={styles.sectionTitle}>Manage Orders</Text>
               <TouchableOpacity
@@ -373,8 +462,8 @@ export default function AdminScreen() {
                   </TouchableOpacity>
                 )}
                 style={styles.ordersList}
-                scrollEnabled={true}
                 nestedScrollEnabled={true}
+                scrollEnabled={false} // Disable FlatList scroll
               />
               {selectedOrder && (
                 <View style={styles.updateStatusSection}>
@@ -410,15 +499,47 @@ export default function AdminScreen() {
                 </View>
               )}
             </View>
-          </ScrollView>
-        ) : (
-          <View style={styles.productsContainer}>
-            <ScrollView>
-              {renderProductsList()}
+          ) : (
+            <View style={styles.productsContainer}>
+              <FlatList
+                data={products}
+                keyExtractor={(item) => item._id}
+                renderItem={({ item }) => (
+                  <View style={styles.productCard}>
+                    {item.image && (
+                      <Image 
+                        source={{ uri: item.image.startsWith('data:') ? item.image : `data:image/jpeg;base64,${item.image}` }} 
+                        style={styles.productImage} 
+                      />
+                    )}
+                    <View style={styles.productInfo}>
+                      <Text style={styles.productName}>{item.name}</Text>
+                      <Text style={styles.productPrice}>₱{item.price}</Text>
+                      <Text style={styles.productCategory}>{item.category}</Text>
+                    </View>
+                    <View style={styles.productActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                        onPress={() => handleEditProduct(item)}
+                      >
+                        <Text style={styles.actionButtonText}>Edit</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: '#F44336' }]}
+                        onPress={() => handleDeleteProduct(item._id)}
+                      >
+                        <Text style={styles.actionButtonText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+                scrollEnabled={false} // Disable FlatList scroll
+                nestedScrollEnabled={true}
+              />
               {renderProductForm()}
-            </ScrollView>
-          </View>
-        )}
+            </View>
+          )}
+        </ScrollView>
       </LinearGradient>
     );
   };
@@ -445,9 +566,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   ordersList: {
-    flexGrow: 1,
     marginBottom: 10,
-    height: windowHeight * 0.6,
+    height: 'auto',
   },
   orderCard: {
     backgroundColor: '#FFF',
@@ -474,46 +594,6 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 12,
-  },
-  statusBadgeText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  orderInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  orderDate: {
-    color: '#8D6E63',
-    fontSize: 14,
-  },
-  orderAmount: {
-    color: '#3E2723',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  orderStatusContainer: {
-    flex: 1,
-    padding: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 15,
-    margin: 10,
-    marginTop: 5,
-  },
-  updateStatusSection: {
-    marginTop: 10,
-    backgroundColor: '#FFF',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 20,
-    elevation: 3,
-    shadowColor: '#8B4513',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   updateTitle: {
     fontSize: 18,
@@ -536,6 +616,14 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: 'transparent',
     color: '#3E2723',
+  },
+  orderStatusContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 15,
+    margin: 10,
+    marginTop: 5,
+    padding: 15,
+    paddingBottom: 30,
   },
   updateButton: {
     backgroundColor: '#8B4513',
@@ -573,10 +661,16 @@ const styles = StyleSheet.create({
   },
   segmentedControl: {
     flexDirection: 'row',
-    marginBottom: 20,
+    margin: 15,
+    marginBottom: 5,
     backgroundColor: '#FFF',
     borderRadius: 10,
     padding: 5,
+    elevation: 3,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   segmentButton: {
     flex: 1,
@@ -592,12 +686,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   productsContainer: {
-    flex: 1,
-    padding: 15,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 15,
     margin: 10,
     marginTop: 5,
+    padding: 15,
+    paddingBottom: 30,
   },
   productCard: {
     backgroundColor: '#FFF',
@@ -692,5 +786,31 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginVertical: 10,
     resizeMode: 'cover',
+  },
+  mainScrollView: {
+    flex: 1,
+    width: '100%',
+  },
+  imageButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 10,
+  },
+  imageButton: {
+    flex: 1,
+    backgroundColor: '#8B4513',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  imageButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

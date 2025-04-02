@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
+import { Camera } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BASE_URL from "../config"; // Import BASE_URL
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +22,16 @@ import Toast from 'react-native-toast-message';
 import { CartContext } from "../context/CartContext"; // Import CartContext
 import { AuthContext } from '../context/AuthContext'; // Import AuthContext
 import { useFocusEffect } from "@react-navigation/native"; // Import useFocusEffect
+import * as ImageManipulator from "expo-image-manipulator"; // Import ImageManipulator
+import * as WebBrowser from 'expo-web-browser';
+import * as Facebook from 'expo-facebook';
+import * as Google from 'expo-auth-session/providers/google';
+
+WebBrowser.maybeCompleteAuthSession();
+
+const FB_APP_ID = 'your_facebook_app_id';
+const GOOGLE_CLIENT_ID = 'your_google_client_id';
+const GOOGLE_ANDROID_CLIENT_ID = 'your_android_client_id';
 
 export default function ProfileScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -42,9 +53,16 @@ export default function ProfileScreen() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editImage, setEditImage] = useState(null);
+  const [cameraPermission, setCameraPermission] = useState(null);
+  const [type, setType] = useState('back'); // Use string directly instead of CameraType.back
 
   const { setOnOrderPlaced } = useContext(CartContext); // Access CartContext
   const { setUserRole } = useContext(AuthContext); // Access AuthContext
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId: GOOGLE_CLIENT_ID,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+  });
 
   useEffect(() => {
     const checkLoginStatus = async () => {
@@ -74,6 +92,13 @@ export default function ProfileScreen() {
         fetchUserOrders(userId, token);
       }
     });
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setCameraPermission(status === 'granted');
+    })();
   }, []);
 
   useFocusEffect(
@@ -133,6 +158,110 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleFacebookLogin = async () => {
+    try {
+      await Facebook.initializeAsync({ appId: FB_APP_ID });
+      const { type, token } = await Facebook.logInWithReadPermissionsAsync({
+        permissions: ['public_profile', 'email'],
+      });
+
+      if (type === 'success') {
+        const response = await fetch(`${BASE_URL}/api/auth/facebook`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token }),
+        });
+        
+        const data = await response.json();
+        await AsyncStorage.setItem('token', data.token);
+        await AsyncStorage.setItem('userId', data.user._id);
+        await AsyncStorage.setItem('userRole', data.user.role);
+        
+        setUserRole(data.user.role);
+        setProfileImage(data.user.profileImage);
+        setUserName(data.user.name);
+        setLoggedIn(true);
+        
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Logged in with Facebook! 👋',
+          visibilityTime: 3000,
+          position: 'top',
+        });
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Facebook login failed',
+        visibilityTime: 3000,
+        position: 'top',
+      });
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const result = await promptAsync();
+      if (result?.type === 'success') {
+        const response = await fetch(`${BASE_URL}/api/auth/google`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token: result.authentication.accessToken }),
+        });
+        
+        const data = await response.json();
+        await AsyncStorage.setItem('token', data.token);
+        await AsyncStorage.setItem('userId', data.user._id);
+        await AsyncStorage.setItem('userRole', data.user.role);
+        
+        setUserRole(data.user.role);
+        setProfileImage(data.user.profileImage);
+        setUserName(data.user.name);
+        setLoggedIn(true);
+        
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Logged in with Google! 👋',
+          visibilityTime: 3000,
+          position: 'top',
+        });
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Google login failed',
+        visibilityTime: 3000,
+        position: 'top',
+      });
+    }
+  };
+
+  const compressAndResizeImage = async (imageUri) => {
+    try {
+      const manipulatedImage = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ resize: { width: 600 } }], // Resize to smaller width
+        { 
+          compress: 0.5, // Reduce quality to 50%
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: true
+        }
+      );
+      return manipulatedImage;
+    } catch (error) {
+      console.error("Error processing image:", error);
+      throw error;
+    }
+  };
+
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -155,39 +284,148 @@ export default function ProfileScreen() {
     }
   };
 
+  const takePicture = async () => {
+    try {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Toast.show({
+          type: 'error',
+          text1: 'Permission Denied',
+          text2: 'Camera permission is required',
+        });
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+        cameraType: type, // Use the string value directly
+      });
+
+      if (!result.canceled) {
+        try {
+          const processedImage = await compressAndResizeImage(result.assets[0].uri);
+          setImage({
+            uri: processedImage.uri,
+            base64: processedImage.base64
+          });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to process image',
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Camera error:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to take picture',
+      });
+    }
+  };
+
+  const takeEditPicture = async () => {
+    try {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Toast.show({
+          type: 'error',
+          text1: 'Permission Denied',
+          text2: 'Camera permission is required',
+        });
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        try {
+          const processedImage = await compressAndResizeImage(result.assets[0].uri);
+          setEditImage({
+            uri: processedImage.uri,
+            base64: processedImage.base64
+          });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to process image',
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Camera error:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to take picture',
+      });
+    }
+  };
+
   const handleRegister = async () => {
     try {
+      if (!name || !email || !password) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please fill in all fields',
+        });
+        return;
+      }
+
       const formData = {
         name,
         email,
         password,
       };
 
-      // Add base64 image if available
-      if (image && image.base64) {
+      if (image?.base64) {
+        // Ensure the base64 string isn't too long
+        if (image.base64.length > 1000000) { // If larger than ~1MB
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Image size too large. Please choose a smaller image.',
+          });
+          return;
+        }
         formData.profileImage = `data:image/jpeg;base64,${image.base64}`;
       }
 
-      await axios.post(`${BASE_URL}/api/auth/register`, formData, {
-        headers: { "Content-Type": "application/json" },
+      const response = await axios.post(`${BASE_URL}/api/auth/register`, formData, {
+        headers: { 
+          "Content-Type": "application/json"
+        },
+        timeout: 10000 // 10 second timeout
       });
 
-      Toast.show({
-        type: 'success',
-        text1: 'Success',
-        text2: 'Registration successful! Please login.',
-        visibilityTime: 3000,
-        position: 'top',
-      });
-      setIsLogin(true);
+      if (response.status === 200 || response.status === 201) {
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Registration successful! Please login.',
+        });
+        setIsLogin(true);
+      }
     } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to register. Please try again.',
-        visibilityTime: 3000,
-        position: 'top',
+        text2: errorMessage,
       });
+      console.error("Registration error:", error.response?.data || error.message);
     }
   };
 
@@ -314,7 +552,6 @@ export default function ProfileScreen() {
         text1: 'Error',
         text2: 'Failed to pick image',
         visibilityTime: 3000,
-        position: 'top',
       });
     }
   };
@@ -330,21 +567,29 @@ export default function ProfileScreen() {
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>Edit Profile</Text>
           
-          <TouchableOpacity onPress={pickEditImage} style={styles.imagePickerButton}>
-            {editImage ? (
-              <Image source={{ uri: editImage.uri }} style={styles.editImagePreview} />
-            ) : profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.editImagePreview} />
-            ) : (
-              <Text style={styles.imagePickerText}>Choose Profile Picture</Text>
-            )}
-          </TouchableOpacity>
+          {/* Preview current image */}
+          {editImage ? (
+            <Image source={{ uri: editImage.uri }} style={styles.editImagePreview} />
+          ) : profileImage ? (
+            <Image source={{ uri: profileImage }} style={styles.editImagePreview} />
+          ) : null}
+
+          {/* Image selection buttons */}
+          <View style={styles.imageButtonsContainer}>
+            <TouchableOpacity style={styles.imageButton} onPress={pickEditImage}>
+              <Text style={styles.imageButtonText}>Gallery</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.imageButton} onPress={takeEditPicture}>
+              <Text style={styles.imageButtonText}>Camera</Text>
+            </TouchableOpacity>
+          </View>
 
           <TextInput
             style={styles.input}
             placeholder="Name"
             value={editName}
             onChangeText={setEditName}
+            placeholderTextColor="#8D6E63"
           />
           <TextInput
             style={styles.input}
@@ -352,14 +597,15 @@ export default function ProfileScreen() {
             value={editEmail}
             onChangeText={setEditEmail}
             keyboardType="email-address"
+            placeholderTextColor="#8D6E63"
           />
           
-          <TouchableOpacity style={styles.button} onPress={handleUpdateProfile}>
+          <TouchableOpacity style={styles.updateButton} onPress={handleUpdateProfile}>
             <Text style={styles.buttonText}>Update Profile</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[styles.button, { backgroundColor: '#D7CCC8' }]} 
+            style={styles.cancelButton}
             onPress={() => setIsEditing(false)}
           >
             <Text style={[styles.buttonText, { color: '#3E2723' }]}>Cancel</Text>
@@ -374,9 +620,14 @@ export default function ProfileScreen() {
       <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
       <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
       <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-      <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-        <Text style={styles.imagePickerText}>Choose Profile Picture</Text>
-      </TouchableOpacity>
+      <View style={styles.imageButtonsContainer}>
+        <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+          <Text style={styles.imageButtonText}>Choose from Gallery</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.imageButton} onPress={takePicture}>
+          <Text style={styles.imageButtonText}>Take Photo</Text>
+        </TouchableOpacity>
+      </View>
       {image && (
         <Image source={{ uri: image.uri }} style={styles.imagePreview} />
       )}
@@ -451,18 +702,66 @@ export default function ProfileScreen() {
             {renderEditProfile()}
           </>
         ) : (
-          <>
+          <View style={styles.authContainer}>
+            {/* Social Login/Register Buttons First */}
+            <View style={styles.socialButtonsContainer}>
+              <Text style={styles.authTitle}>Welcome to Our App</Text>
+              <Text style={styles.authSubtitle}>Continue with</Text>
+              
+              <TouchableOpacity 
+                style={[styles.socialButton, styles.googleButton]} 
+                onPress={handleGoogleLogin}
+              >
+                <Text style={styles.socialButtonText}>Continue with Google</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.socialButton, styles.facebookButton]} 
+                onPress={handleFacebookLogin}
+              >
+                <Text style={styles.socialButtonText}>Continue with Facebook</Text>
+              </TouchableOpacity>
+
+              <View style={styles.dividerContainer}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+            </View>
+
+            {/* Email Login/Register Form */}
             {isLogin ? (
-              <>
-                <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-                <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-                <Button title="Login" onPress={handleLogin} />
-                <Button title="Switch to Register" onPress={() => setIsLogin(false)} />
-              </>
+              <View style={styles.formContainer}>
+                <TextInput 
+                  placeholder="Email" 
+                  value={email} 
+                  onChangeText={setEmail} 
+                  style={styles.input}
+                  placeholderTextColor="#8D6E63"
+                />
+                <TextInput 
+                  placeholder="Password" 
+                  value={password} 
+                  onChangeText={setPassword} 
+                  secureTextEntry 
+                  style={styles.input}
+                  placeholderTextColor="#8D6E63"
+                />
+                <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+                  <Text style={styles.buttonText}>Login</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.switchButton} 
+                  onPress={() => setIsLogin(false)}
+                >
+                  <Text style={styles.switchButtonText}>Don't have an account? Register</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               renderRegistrationForm()
             )}
-          </>
+          </View>
         )}
         {message ? <Text>{message}</Text> : null}
 
@@ -632,7 +931,10 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
+    alignSelf: 'center',
     marginBottom: 20,
+    borderWidth: 3,
+    borderColor: '#8B4513',
   },
   imagePickerButton: {
     backgroundColor: '#8B4513',
@@ -652,5 +954,128 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     marginVertical: 10,
     alignSelf: 'center',
+  },
+  imageButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 15,
+    paddingHorizontal: 10,
+  },
+  imageButton: {
+    backgroundColor: '#8B4513',
+    padding: 12,
+    borderRadius: 25,
+    flex: 0.48,
+    elevation: 2,
+  },
+  imageButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  updateButton: {
+    backgroundColor: '#8B4513',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginBottom: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  cancelButton: {
+    backgroundColor: '#D7CCC8',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginBottom: 12,
+  },
+  loginButton: {
+    backgroundColor: '#8B4513',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginBottom: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  socialButtonsContainer: {
+    marginVertical: 20,
+    width: '100%',
+  },
+  socialButton: {
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginBottom: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  facebookButton: {
+    backgroundColor: '#1877F2',
+  },
+  googleButton: {
+    backgroundColor: '#DB4437',
+  },
+  socialButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  switchButton: {
+    paddingVertical: 10,
+  },
+  switchButtonText: {
+    color: '#8B4513',
+    fontSize: 16,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+  },
+  authContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  authTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#3E2723',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  authSubtitle: {
+    fontSize: 16,
+    color: '#5D4037',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#8D6E63',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    fontSize: 14,
+    color: '#8D6E63',
+  },
+  formContainer: {
+    width: '100%',
   },
 });

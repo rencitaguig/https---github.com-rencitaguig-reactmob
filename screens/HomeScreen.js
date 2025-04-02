@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useContext } from "react";
-import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, Modal, ScrollView, RefreshControl } from "react-native";
+import React, { useEffect, useState, useContext, useRef } from "react";
+import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, Modal, ScrollView, RefreshControl, Animated, Dimensions } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchProducts } from "../store/productSlice";
 import { fetchReviews, updateReview, deleteReview } from "../store/reviewSlice";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CartContext } from "../context/CartContext";
 import { LinearGradient } from 'expo-linear-gradient';
-import { Dimensions } from 'react-native';
 import { useFocusEffect } from "@react-navigation/native";
+import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -24,6 +24,11 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [categories, setCategories] = useState(['All']);
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [showPriceFilter, setShowPriceFilter] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const drawerAnim = useRef(new Animated.Value(-300)).current;
 
   const handleAddToCart = async (item) => {
     await addToCart(item);
@@ -74,7 +79,9 @@ export default function HomeScreen({ navigation }) {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.price.toString().includes(searchQuery);
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const matchesPrice = (!minPrice || product.price >= Number(minPrice)) && 
+      (!maxPrice || product.price <= Number(maxPrice));
+    return matchesSearch && matchesCategory && matchesPrice;
   });
 
   useFocusEffect(
@@ -89,47 +96,121 @@ export default function HomeScreen({ navigation }) {
     setRefreshing(false);
   }, [dispatch]);
 
-  const renderCategoryFilter = () => (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.categoryContainer}
-    >
-      {categories.map((category) => (
-        <TouchableOpacity
-          key={category}
-          style={[
-            styles.categoryButton,
-            selectedCategory === category && styles.categoryButtonActive
-          ]}
-          onPress={() => setSelectedCategory(category)}
-        >
-          <Text
-            style={[
-              styles.categoryButtonText,
-              selectedCategory === category && styles.categoryButtonTextActive
-            ]}
-          >
-            {category}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
-  );
+  const toggleDrawer = () => {
+    const toValue = drawerVisible ? -300 : 0;
+    
+    // Cancel any running animations
+    drawerAnim.stopAnimation();
+    
+    Animated.timing(drawerAnim, {
+      toValue,
+      duration: 300,
+      useNativeDriver: true,
+      isInteraction: true,
+    }).start(() => {
+      setDrawerVisible(!drawerVisible);
+    });
+  };
 
   return (
     <LinearGradient
       colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
       style={styles.container}
     >
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search products..."
-        placeholderTextColor="#8D6E63"
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
-      {renderCategoryFilter()}
+      <View style={styles.searchContainer}>
+        <TouchableOpacity 
+          style={styles.menuButton}
+          onPress={toggleDrawer}
+        >
+          <Ionicons name="menu" size={24} color="#8B4513" />
+        </TouchableOpacity>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search products..."
+          placeholderTextColor="#8D6E63"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
+      {/* Drawer */}
+      <Animated.View style={[
+        styles.drawer,
+        {
+          transform: [{
+            translateX: drawerAnim
+          }]
+        }
+      ]}>
+        <Text style={styles.drawerTitle}>Filters</Text>
+        
+        <Text style={styles.drawerSectionTitle}>Categories</Text>
+        <ScrollView>
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category}
+              style={[
+                styles.drawerCategoryButton,
+                selectedCategory === category && styles.drawerCategoryButtonActive
+              ]}
+              onPress={() => {
+                setSelectedCategory(category);
+                toggleDrawer();
+              }}
+            >
+              <Text style={[
+                styles.drawerCategoryText,
+                selectedCategory === category && styles.drawerCategoryTextActive
+              ]}>
+                {category}
+              </Text>
+            </TouchableOpacity>
+          ))}
+
+          <Text style={styles.drawerSectionTitle}>Price Range</Text>
+          <View style={styles.drawerPriceContainer}>
+            <TextInput
+              style={styles.drawerPriceInput}
+              placeholder="Min Price"
+              value={minPrice}
+              onChangeText={setMinPrice}
+              keyboardType="numeric"
+              placeholderTextColor="#8D6E63"
+            />
+            <Text style={styles.drawerPriceSeparator}>-</Text>
+            <TextInput
+              style={styles.drawerPriceInput}
+              placeholder="Max Price"
+              value={maxPrice}
+              onChangeText={setMaxPrice}
+              keyboardType="numeric"
+              placeholderTextColor="#8D6E63"
+            />
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.drawerClearButton}
+            onPress={() => {
+              setMinPrice('');
+              setMaxPrice('');
+              setSelectedCategory('All');
+              toggleDrawer();
+            }}
+          >
+            <Text style={styles.drawerClearButtonText}>Clear All Filters</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </Animated.View>
+
+      {/* Backdrop */}
+      {drawerVisible && (
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={toggleDrawer}
+        />
+      )}
+
       <FlatList
         data={filteredProducts}
         keyExtractor={(item) => `product-${item._id}`} // Added prefix for uniqueness
@@ -251,11 +332,28 @@ const styles = StyleSheet.create({
     padding: 15, 
     backgroundColor: "#EFEBE9" // Light brown background
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 15,
+    paddingHorizontal: 15,
+  },
+  menuButton: {
+    padding: 10,
+    marginRight: 10,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    elevation: 3,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
   searchInput: { 
+    flex: 1,
     height: 50,
     backgroundColor: '#FFFFFF',
     borderRadius: 25,
-    marginVertical: 15,
     paddingHorizontal: 20,
     fontSize: 16,
     elevation: 3,
@@ -263,6 +361,97 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
+  },
+  drawer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 300,
+    backgroundColor: '#FFF',
+    zIndex: 1000,
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    left: 0,
+  },
+  drawerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#3E2723',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  drawerSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#5D4037',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  drawerCategoryButton: {
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#D7CCC8',
+  },
+  drawerCategoryButtonActive: {
+    backgroundColor: '#8B4513',
+  },
+  drawerCategoryText: {
+    fontSize: 16,
+    color: '#5D4037',
+    fontWeight: '500',
+  },
+  drawerCategoryTextActive: {
+    color: '#FFF',
+  },
+  drawerPriceContainer: {
+    marginVertical: 15,
+  },
+  drawerPriceInput: {
+    backgroundColor: '#F5F5F5',
+    height: 45,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    marginBottom: 10,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#D7CCC8',
+    color: '#3E2723',
+  },
+  drawerPriceSeparator: {
+    textAlign: 'center',
+    fontSize: 18,
+    color: '#8B4513',
+    marginVertical: 5,
+  },
+  drawerClearButton: {
+    backgroundColor: '#D7CCC8',
+    padding: 15,
+    borderRadius: 25,
+    marginTop: 20,
+    marginBottom: 30,
+  },
+  drawerClearButtonText: {
+    color: '#3E2723',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 999,
   },
   categoryContainer: {
     marginBottom: 15,
@@ -296,6 +485,64 @@ const styles = StyleSheet.create({
   },
   categoryButtonTextActive: {
     color: '#FFFFFF',
+  },
+  filterContainer: {
+    marginBottom: 15,
+  },
+  filterButton: {
+    backgroundColor: '#8B4513',
+    padding: 12,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  filterButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  priceFilterContainer: {
+    backgroundColor: '#FFF',
+    borderRadius: 15,
+    padding: 15,
+    elevation: 3,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  priceInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  priceInput: {
+    backgroundColor: '#F5F5F5',
+    width: '45%',
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    fontSize: 14,
+    color: '#3E2723',
+    borderWidth: 1,
+    borderColor: '#D7CCC8',
+  },
+  priceSeparator: {
+    color: '#8B4513',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  clearFilterButton: {
+    backgroundColor: '#D7CCC8',
+    padding: 8,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  clearFilterText: {
+    color: '#3E2723',
+    fontSize: 12,
+    fontWeight: '600',
   },
   card: { 
     flex: 1, 
