@@ -26,6 +26,7 @@ import * as ImageManipulator from "expo-image-manipulator"; // Import ImageManip
 import * as WebBrowser from 'expo-web-browser';
 import * as Facebook from 'expo-facebook';
 import * as Google from 'expo-auth-session/providers/google';
+import { storeSecureItem, getSecureItem, removeSecureItem } from '../utils/secureStorage';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -66,9 +67,10 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     const checkLoginStatus = async () => {
-      const token = await AsyncStorage.getItem('token');
-      const userId = await AsyncStorage.getItem('userId');
+      const token = await getSecureItem('token');
+      const userId = await getSecureItem('userId');
       if (token && userId) {
+        console.log('User is logged in with token:', token); // Add this line
         setLoggedIn(true);
         try {
           const userRes = await axios.get(`${BASE_URL}/api/users/${userId}`, {
@@ -86,8 +88,8 @@ export default function ProfileScreen() {
 
     // Set the callback to refresh orders when a new order is placed
     setOnOrderPlaced(() => async () => {
-      const token = await AsyncStorage.getItem('token');
-      const userId = await AsyncStorage.getItem('userId');
+      const token = await getSecureItem('token');
+      const userId = await getSecureItem('userId');
       if (token && userId) {
         fetchUserOrders(userId, token);
       }
@@ -104,8 +106,8 @@ export default function ProfileScreen() {
   useFocusEffect(
     React.useCallback(() => {
       const refreshOrders = async () => {
-        const token = await AsyncStorage.getItem('token');
-        const userId = await AsyncStorage.getItem('userId');
+        const token = await getSecureItem('token');
+        const userId = await getSecureItem('userId');
         if (token && userId) {
           fetchUserOrders(userId, token); // Fetch updated orders when screen is focused
         }
@@ -132,9 +134,12 @@ export default function ProfileScreen() {
     try {
       const res = await axios.post(`${BASE_URL}/api/auth/login`, { email, password });
       const { token, user } = res.data;
-      await AsyncStorage.setItem('token', token);
-      await AsyncStorage.setItem('userId', user._id);
-      await AsyncStorage.setItem('userRole', user.role);
+      
+      console.log('Login successful, token:', token); // Add this line
+      
+      await storeSecureItem('token', token);
+      await storeSecureItem('userId', user._id);
+      await storeSecureItem('userRole', user.role);
       setUserRole(user.role);
       setProfileImage(user.profileImage);
       setUserName(user.name);
@@ -175,9 +180,9 @@ export default function ProfileScreen() {
         });
         
         const data = await response.json();
-        await AsyncStorage.setItem('token', data.token);
-        await AsyncStorage.setItem('userId', data.user._id);
-        await AsyncStorage.setItem('userRole', data.user.role);
+        await storeSecureItem('token', data.token);
+        await storeSecureItem('userId', data.user._id);
+        await storeSecureItem('userRole', data.user.role);
         
         setUserRole(data.user.role);
         setProfileImage(data.user.profileImage);
@@ -216,9 +221,9 @@ export default function ProfileScreen() {
         });
         
         const data = await response.json();
-        await AsyncStorage.setItem('token', data.token);
-        await AsyncStorage.setItem('userId', data.user._id);
-        await AsyncStorage.setItem('userRole', data.user.role);
+        await storeSecureItem('token', data.token);
+        await storeSecureItem('userId', data.user._id);
+        await storeSecureItem('userRole', data.user.role);
         
         setUserRole(data.user.role);
         setProfileImage(data.user.profileImage);
@@ -430,9 +435,9 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
-    await AsyncStorage.removeItem('userId');
-    await AsyncStorage.removeItem('userRole');
+    await removeSecureItem('token');
+    await removeSecureItem('userId');
+    await removeSecureItem('userRole');
     setUserRole(null);
     setLoggedIn(false);
     setUserName("");
@@ -448,8 +453,8 @@ export default function ProfileScreen() {
 
   const handleReviewSubmit = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const userId = await AsyncStorage.getItem('userId');
+      const token = await getSecureItem('token');
+      const userId = await getSecureItem('userId');
       const reviewData = {
         userId,
         productId: selectedOrder.items[0].productId,
@@ -487,8 +492,8 @@ export default function ProfileScreen() {
 
   const handleUpdateProfile = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const userId = await AsyncStorage.getItem('userId');
+      const token = await getSecureItem('token');
+      const userId = await getSecureItem('userId');
       
       const updateData = {
         name: editName,

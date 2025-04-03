@@ -41,33 +41,39 @@ export default function BottomTabNavigator() {
         },
       }}
     >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" color={color} size={26} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Cart"
-        component={CartScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cart" color={color} size={26} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Discounts"
-        component={DiscountScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pricetag" color={color} size={26} />
-          ),
-        }}
-      />
+      {userRole !== 'admin' && (
+        <>
+          <Tab.Screen
+            name="Home"
+            component={HomeScreen}
+            options={{
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="home" color={color} size={26} />
+              ),
+            }}
+          />
+          <Tab.Screen
+            name="Cart"
+            component={CartScreen}
+            options={{
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="cart" color={color} size={26} />
+              ),
+            }}
+          />
+        </>
+      )}
+      {userRole === 'admin' && (
+        <Tab.Screen
+          name="Discounts"
+          component={DiscountScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="pricetag" color={color} size={26} />
+            ),
+          }}
+        />
+      )}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}

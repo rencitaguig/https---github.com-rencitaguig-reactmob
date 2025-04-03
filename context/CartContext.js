@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import BASE_URL from "../config"; // Import BASE_URL
+import { getSecureItem } from '../utils/secureStorage'; // Import secure storage utility
 
 export const CartContext = createContext();
 
@@ -37,25 +38,25 @@ export const CartProvider = ({ children }) => {
   const checkout = async (userId) => {
     if (cart.length === 0) return;
 
-    const orderData = {
-      userId,
-      items: cart.map((item) => ({
-        productId: item._id,
-        name: item.name,
-        quantity: 1, // Assuming quantity is 1
-        price: item.price,
-      })),
-      totalPrice: cart.reduce((sum, item) => sum + item.price, 0),
-    };
-
     try {
-      const token = await AsyncStorage.getItem('token'); // Get token from async storage
+      const token = await getSecureItem('token'); // Use secure storage to get token
       if (!token) {
         console.error("No token found");
         return;
       }
-      console.log("Token:", token); // Debugging: log the token
-      const response = await axios.post(`${BASE_URL}/api/orders`, orderData, { // Use BASE_URL
+
+      const orderData = {
+        userId,
+        items: cart.map((item) => ({
+          productId: item._id,
+          name: item.name,
+          quantity: 1, // Assuming quantity is 1
+          price: item.price,
+        })),
+        totalPrice: cart.reduce((sum, item) => sum + item.price, 0),
+      };
+
+      const response = await axios.post(`${BASE_URL}/api/orders`, orderData, {
         headers: { Authorization: `Bearer ${token}` } // Include token in headers
       });
       console.log("Order placed:", response.data);

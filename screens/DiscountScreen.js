@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchDiscounts, createDiscount, updateDiscount, deleteDiscount } from '../store/discountSlice';
@@ -180,6 +181,35 @@ export default function DiscountScreen() {
     </View>
   );
 
+  const renderDatePicker = () => {
+    return (
+      <>
+        <TouchableOpacity
+          style={styles.dateButton}
+          onPress={() => setShowDatePicker(true)}
+        >
+          <Text style={styles.dateButtonText}>
+            Set Expiry Date: {expiryDate.toLocaleDateString()}
+          </Text>
+        </TouchableOpacity>
+
+        {showDatePicker && (
+          <DateTimePicker
+            testID="dateTimePicker"
+            value={expiryDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, selectedDate) => {
+              setShowDatePicker(Platform.OS === 'ios');
+              if (selectedDate) setExpiryDate(selectedDate);
+            }}
+            minimumDate={new Date()}
+          />
+        )}
+      </>
+    );
+  };
+
   return (
     <LinearGradient
       colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
@@ -208,27 +238,7 @@ export default function DiscountScreen() {
             keyboardType="numeric"
           />
           
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Text style={styles.dateButtonText}>
-              Set Expiry Date: {expiryDate.toLocaleDateString()}
-            </Text>
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={expiryDate}
-              mode="date"
-              display="default"
-              onChange={(event, date) => {
-                setShowDatePicker(false);
-                if (date) setExpiryDate(date);
-              }}
-              minimumDate={new Date()}
-            />
-          )}
+          {renderDatePicker()}
 
           <TouchableOpacity
             style={styles.submitButton}
