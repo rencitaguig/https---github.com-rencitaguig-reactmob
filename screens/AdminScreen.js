@@ -25,6 +25,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useDispatch } from 'react-redux';
 import { fetchProducts as fetchHomeProducts } from '../store/productSlice';
 import { Camera } from 'expo-camera';
+import * as SecureStore from "expo-secure-store"; // Import Secure Store
 
 const windowHeight = Dimensions.get('window').height;
 
@@ -177,7 +178,7 @@ export default function AdminScreen() {
 
   const handleProductAction = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
+      const token = await SecureStore.getItemAsync("token"); // Use Secure Store to get token
       if (!token) {
         setCreateProductMessage("No token found. Please log in again.");
         return;
@@ -241,7 +242,12 @@ export default function AdminScreen() {
 
   const handleDeleteProduct = async (productId) => {
     try {
-      const token = await AsyncStorage.getItem("token");
+      const token = await SecureStore.getItemAsync("token"); // Use Secure Store to get token
+      if (!token) {
+        setCreateProductMessage("No token found. Please log in again.");
+        return;
+      }
+
       await deleteProduct(productId, token);
       setCreateProductMessage("Product deleted successfully!");
       setTimeout(() => setCreateProductMessage(""), 3000);
