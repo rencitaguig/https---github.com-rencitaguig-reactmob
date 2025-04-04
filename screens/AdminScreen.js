@@ -25,14 +25,37 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useDispatch } from 'react-redux';
 import { fetchProducts as fetchHomeProducts } from '../store/productSlice';
 import { Camera } from 'expo-camera';
+import * as Notifications from 'expo-notifications';
+import { useNavigation } from '@react-navigation/native';
 
 const windowHeight = Dimensions.get('window').height;
 
 // Add this constant at the top of your file
 const BANNER_OPTIONS = ['none', 'new', 'sale', 'top'];
 
+async function schedulePushNotification(title, body, orderId) {
+  if (!orderId) {
+    console.error('OrderId is required for notifications');
+    return;
+  }
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: { orderId }, // Ensure orderId is properly set
+      },
+      trigger: null,
+    });
+  } catch (error) {
+    console.error('Error scheduling notification:', error);
+  }
+}
+
 export default function AdminScreen() {
   const dispatch = useDispatch();
+  const navigation = useNavigation();
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [status, setStatus] = useState("Pending");
   const { orders, updateOrderStatus, fetchOrders } = useContext(OrderContext);
@@ -66,6 +89,39 @@ export default function AdminScreen() {
     })();
   }, []);
 
+  useEffect(() => {
+    // Request notification permissions
+    async function requestPermissions() {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        alert('You need to enable notifications to receive order updates!');
+      }
+    }
+
+    // Configure notification handler
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+
+    // Add notification response handler
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const orderId = response.notification.request.content.data.orderId;
+      if (orderId) {
+        navigation.navigate('OrderDetails', { orderId });
+      }
+    });
+
+    requestPermissions();
+
+    return () => {
+      Notifications.removeNotificationSubscription(responseListener);
+    };
+  }, [navigation]);
+
   useFocusEffect(
     React.useCallback(() => {
       fetchOrders();
@@ -84,10 +140,16 @@ export default function AdminScreen() {
       return;
     }
     try {
-      await updateOrderStatus(selectedOrder, status); // Call updateOrderStatus without passing token
+      await updateOrderStatus(selectedOrder, status);
       setUpdateMessage("Order status updated successfully!");
-      setSelectedOrder(null); // Clear selection after update
-      setTimeout(() => setUpdateMessage(""), 3000); // Clear message after 3 seconds
+      
+      // Send push notification
+      const notificationTitle = "Order Status Update";
+      const notificationBody = `Order #${selectedOrder.slice(-6)} has been updated to ${status}`;
+      await schedulePushNotification(notificationTitle, notificationBody, selectedOrder);
+
+      setSelectedOrder(null);
+      setTimeout(() => setUpdateMessage(""), 3000);
     } catch (error) {
       setUpdateMessage("Failed to update order status.");
       console.error("Error updating order:", error);

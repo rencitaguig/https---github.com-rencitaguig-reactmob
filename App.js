@@ -9,6 +9,12 @@ import { ProductProvider } from './context/ProductContext'; // Import ProductPro
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { v4 as uuidv4 } from "uuid"; // Import UUID library for generating unique IDs
 import * as SecureStore from "expo-secure-store"; // Import Secure Store
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import OrderDetailsScreen from './screens/OrderDetailsScreen';
+import AdminScreen from './screens/AdminScreen';
+
+const Stack = createStackNavigator();
 
 export default function App() {
   useEffect(() => {
@@ -45,7 +51,30 @@ export default function App() {
         <OrderProvider>
           <ProductProvider>
             <CartProvider>
-              <AppNavigator />
+              <NavigationContainer>
+                <Stack.Navigator
+                  screenOptions={{
+                    headerStyle: {
+                      backgroundColor: '#8B4513',
+                    },
+                    headerTintColor: '#fff',
+                    headerTitleStyle: {
+                      fontWeight: 'bold',
+                    },
+                  }}
+                >
+                  <Stack.Screen 
+                    name="Admin" 
+                    component={AdminScreen}
+                    options={{ title: 'Admin Panel' }}
+                  />
+                  <Stack.Screen 
+                    name="OrderDetails" 
+                    component={OrderDetailsScreen}
+                    options={{ title: 'Order Details' }}
+                  />
+                </Stack.Navigator>
+              </NavigationContainer>
             </CartProvider>
           </ProductProvider>
         </OrderProvider>
