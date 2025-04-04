@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import BASE_URL from "../config"; // Import BASE_URL
 import { getSecureItem } from '../utils/secureStorage'; // Import secure storage utility
+import * as SecureStore from "expo-secure-store"; // Import Secure Store
 
 export const CartContext = createContext();
 
@@ -35,10 +36,24 @@ export const CartProvider = ({ children }) => {
     return [];
   };
 
-  const checkout = async (userId) => {
+  const checkout = async () => {
     if (cart.length === 0) return;
 
     try {
+      let userId = await SecureStore.getItemAsync('userId'); // Use Secure Store to get userId
+      if (!userId) {
+        console.error("No user ID found");
+        return; // Exit if userId is not found
+      }
+
+      // Ensure userId is formatted as an ObjectId
+      if (!/^[a-f\d]{24}$/i.test(userId)) {
+        console.error(`Invalid userId format: ${userId}`);
+        return; // Exit if userId is not valid
+      }
+
+      console.log(`Using userId: ${userId}`); // Log the valid userId
+
       const token = await getSecureItem('token'); // Use secure storage to get token
       if (!token) {
         console.error("No token found");

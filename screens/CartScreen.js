@@ -14,6 +14,7 @@ import { CartContext } from "../context/CartContext";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSelector } from 'react-redux';
+import * as SecureStore from "expo-secure-store"; // Import Secure Store
 
 export default function CartScreen() {
   const { cart, removeFromCart, checkout } = useContext(CartContext);
@@ -23,12 +24,12 @@ export default function CartScreen() {
   const { discounts } = useSelector((state) => state.discounts);
 
   const handleCheckout = async () => {
-    const userId = await AsyncStorage.getItem('userId'); // Get user ID from async storage
+    const userId = await SecureStore.getItemAsync('userId'); // Use Secure Store to get userId
     if (!userId) {
-      console.error("No user ID found");
-      return;
+      Alert.alert("Error", "No user ID found. Please log in again.");
+      return; // Exit if userId is not found
     }
-    checkout(userId);
+    checkout();
     setModalVisible(false);
   };
 

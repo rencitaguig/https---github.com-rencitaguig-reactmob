@@ -56,6 +56,7 @@ export default function ProfileScreen() {
   const [editImage, setEditImage] = useState(null);
   const [cameraPermission, setCameraPermission] = useState(null);
   const [type, setType] = useState('back'); // Use string directly instead of CameraType.back
+  const [selectedProduct, setSelectedProduct] = useState(null); // Add state for selected product
 
   const { setOnOrderPlaced } = useContext(CartContext); // Access CartContext
   const { setUserRole } = useContext(AuthContext); // Access AuthContext
@@ -455,9 +456,19 @@ export default function ProfileScreen() {
     try {
       const token = await getSecureItem('token');
       const userId = await getSecureItem('userId');
+      if (!selectedProduct) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please select a product to review.',
+          visibilityTime: 3000,
+          position: 'top',
+        });
+        return;
+      }
       const reviewData = {
         userId,
-        productId: selectedOrder.items[0].productId,
+        productId: selectedProduct.productId, // Use selected product's ID
         rating,
         comment,
       };
@@ -472,6 +483,9 @@ export default function ProfileScreen() {
         position: 'top',
       });
       setReviewModalVisible(false);
+      setSelectedProduct(null); // Reset selected product
+      setRating(0); // Reset rating
+      setComment(''); // Reset comment
     } catch (error) {
       Toast.show({
         type: 'error',
@@ -684,6 +698,67 @@ export default function ProfileScreen() {
     );
   };
 
+  const renderReviewModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={reviewModalVisible}
+      onRequestClose={() => setReviewModalVisible(false)}
+    >
+      <View style={styles.modalContainer}>
+        <ScrollView style={styles.modalScrollView}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Write a Review</Text>
+            <Text style={styles.text}>Select a Product:</Text>
+            {selectedOrder && selectedOrder.items ? ( // Add null check for selectedOrder and items
+              <FlatList
+                data={selectedOrder.items} // List products in the selected order
+                keyExtractor={(item) => item.productId}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.productCard,
+                      selectedProduct?.productId === item.productId && styles.selectedProductCard
+                    ]}
+                    onPress={() => setSelectedProduct(item)} // Set selected product
+                  >
+                    <Text style={styles.productName}>{item.name}</Text>
+                    <Text style={styles.productPrice}>₱{item.price.toFixed(2)}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            ) : (
+              <Text style={styles.text}>No products found in this order.</Text> // Fallback message
+            )}
+            <TextInput
+              placeholder="Rating (1-5)"
+              value={rating.toString()}
+              onChangeText={setRating}
+              keyboardType="numeric"
+              style={styles.input}
+              placeholderTextColor="#3E2723"
+            />
+            <TextInput
+              placeholder="Comment"
+              value={comment}
+              onChangeText={setComment}
+              style={[styles.input, styles.textArea]}
+              multiline
+              numberOfLines={4}
+              placeholderTextColor="#3E2723"
+            />
+            <TouchableOpacity style={styles.button} onPress={handleReviewSubmit}>
+              <Text style={styles.buttonText}>Submit Review</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.button, { marginBottom: 20 }]} onPress={() => setReviewModalVisible(false)}>
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+
   return (
     <LinearGradient 
       colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
@@ -770,44 +845,7 @@ export default function ProfileScreen() {
         )}
         {message ? <Text>{message}</Text> : null}
 
-        {/* Review Modal */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={reviewModalVisible}
-          onRequestClose={() => setReviewModalVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            <ScrollView style={styles.modalScrollView}>
-              <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Write a Review</Text>
-                <TextInput
-                  placeholder="Rating (1-5)"
-                  value={rating.toString()}
-                  onChangeText={setRating}
-                  keyboardType="numeric"
-                  style={styles.input}
-                  placeholderTextColor="#3E2723"
-                />
-                <TextInput
-                  placeholder="Comment"
-                  value={comment}
-                  onChangeText={setComment}
-                  style={[styles.input, styles.textArea]}
-                  multiline
-                  numberOfLines={4}
-                  placeholderTextColor="#3E2723"
-                />
-                <TouchableOpacity style={styles.button} onPress={handleReviewSubmit}>
-                  <Text style={styles.buttonText}>Submit Review</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.button, { marginBottom: 20 }]} onPress={() => setReviewModalVisible(false)}>
-                  <Text style={styles.buttonText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </Modal>
+        {renderReviewModal()}
         <Toast />
       </View>
     </LinearGradient>
@@ -1082,5 +1120,28 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     width: '100%',
+  },
+  productCard: {
+    backgroundColor: '#FFF',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  selectedProductCard: {
+    borderColor: '#8B4513',
+    borderWidth: 2,
+  },
+  productName: {
+    fontSize: 16,
+    color: '#3E2723',
+  },
+  productPrice: {
+    fontSize: 14,
+    color: '#5D4037',
   },
 });

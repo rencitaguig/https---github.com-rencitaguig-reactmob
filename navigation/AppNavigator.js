@@ -10,8 +10,10 @@ export default function AppNavigator() {
   const { fetchOrders } = useContext(OrderContext); // Access fetchOrders from OrderContext
 
   useEffect(() => {
-    fetchOrders(); // Fetch orders as soon as the app is opened
-  }, []);
+    if (fetchOrders) {
+      fetchOrders(); // Fetch orders as soon as the app is opened
+    }
+  }, [fetchOrders]);
 
   return (
     <NavigationContainer>

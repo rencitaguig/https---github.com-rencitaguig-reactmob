@@ -84,12 +84,7 @@ export default function AdminScreen() {
       return;
     }
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        setMessage("No token found. Please log in again.");
-        return;
-      }
-      await updateOrderStatus(selectedOrder, status, token);
+      await updateOrderStatus(selectedOrder, status); // Call updateOrderStatus without passing token
       setUpdateMessage("Order status updated successfully!");
       setSelectedOrder(null); // Clear selection after update
       setTimeout(() => setUpdateMessage(""), 3000); // Clear message after 3 seconds
@@ -469,7 +464,7 @@ export default function AdminScreen() {
                 <Text style={styles.refreshButtonText}>Refresh Orders</Text>
               </TouchableOpacity>
               <FlatList
-                data={orders}
+                data={orders} // Use orders from OrderContext
                 keyExtractor={(item) => item._id.toString()}
                 renderItem={({ item }) => (
                   <TouchableOpacity 
