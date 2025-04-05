@@ -25,48 +25,15 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useDispatch } from 'react-redux';
 import { fetchProducts as fetchHomeProducts } from '../store/productSlice';
 import { Camera } from 'expo-camera';
-<<<<<<< HEAD
-import * as Notifications from 'expo-notifications';
-import { useNavigation } from '@react-navigation/native';
-=======
 import * as SecureStore from "expo-secure-store"; // Import Secure Store
->>>>>>> 0db1b89c4eb0b482c9b3e47de6a2f5a14208142c
 
 const windowHeight = Dimensions.get('window').height;
 
 // Add this constant at the top of your file
 const BANNER_OPTIONS = ['none', 'new', 'sale', 'top'];
 
-async function schedulePushNotification(title, body, orderId, userId) {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      data: { 
-        orderId,
-        userId, // Include userId in notification data
-        screen: 'OrderDetails' // Add screen name for navigation
-      },
-    },
-    trigger: null,
-  });
-}
-
-// Add this function near the top
-const storeNotification = async (notification) => {
-  try {
-    const existingNotifications = await AsyncStorage.getItem('pendingNotifications');
-    const notifications = existingNotifications ? JSON.parse(existingNotifications) : [];
-    notifications.push(notification);
-    await AsyncStorage.setItem('pendingNotifications', JSON.stringify(notifications));
-  } catch (error) {
-    console.error('Error storing notification:', error);
-  }
-};
-
 export default function AdminScreen() {
   const dispatch = useDispatch();
-  const navigation = useNavigation();
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [status, setStatus] = useState("Pending");
   const { orders, updateOrderStatus, fetchOrders } = useContext(OrderContext);
@@ -100,39 +67,6 @@ export default function AdminScreen() {
     })();
   }, []);
 
-  useEffect(() => {
-    // Request notification permissions
-    async function requestPermissions() {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        alert('You need to enable notifications to receive order updates!');
-      }
-    }
-
-    // Configure notification handler
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-
-    // Add notification response handler
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      const orderId = response.notification.request.content.data.orderId;
-      if (orderId) {
-        navigation.navigate('OrderDetails', { orderId });
-      }
-    });
-
-    requestPermissions();
-
-    return () => {
-      Notifications.removeNotificationSubscription(responseListener);
-    };
-  }, [navigation]);
-
   useFocusEffect(
     React.useCallback(() => {
       fetchOrders();
@@ -146,33 +80,18 @@ export default function AdminScreen() {
   };
 
   const handleUpdateOrderStatus = async () => {
-    if (!selectedOrder) return;
-  
+    if (!selectedOrder) {
+      setMessage("Please select an order.");
+      return;
+    }
     try {
-      const orderToUpdate = orders.find(order => order._id === selectedOrder);
-      
-      await updateOrderStatus(selectedOrder, status);
-      
-      // Store notification instead of showing it immediately
-      const notification = {
-        title: "Order Status Update",
-        body: `Order #${selectedOrder.slice(-6)} has been updated to ${status}`,
-        data: {
-          orderId: selectedOrder,
-          userId: orderToUpdate.userId._id,
-          screen: 'OrderDetails'
-        }
-      };
-
-      await storeNotification(notification);
-      
-      Toast.show({
-        type: 'success',
-        text1: 'Order status updated successfully'
-      });
-
+      await updateOrderStatus(selectedOrder, status); // Call updateOrderStatus without passing token
+      setUpdateMessage("Order status updated successfully!");
+      setSelectedOrder(null); // Clear selection after update
+      setTimeout(() => setUpdateMessage(""), 3000); // Clear message after 3 seconds
     } catch (error) {
-      console.error('Error updating order:', error);
+      setUpdateMessage("Failed to update order status.");
+      console.error("Error updating order:", error);
     }
   };
 

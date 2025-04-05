@@ -1,30 +1,36 @@
-import React, { useContext, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer } from "@react-navigation/native";
 import BottomTabNavigator from "./BottomTabNavigator";
-import { OrderContext } from "../context/OrderContext"; // Import OrderContext
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
+import * as SecureStore from "expo-secure-store";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-function TabNavigator() {
-  return (
-    <Tab.Navigator>
-      <Tab.Screen name="Main" component={BottomTabNavigator} />
-    </Tab.Navigator>
-  );
-}
-
 function AppNavigator() {
-  const { fetchOrders } = useContext(OrderContext); // Access fetchOrders from OrderContext
+  const [userRole, setUserRole] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (fetchOrders) {
-      fetchOrders(); // Fetch orders as soon as the app is opened
-    }
-  }, [fetchOrders]);
+    const fetchUserRole = async () => {
+      try {
+        const role = await SecureStore.getItemAsync("userRole");
+        setUserRole(role);
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUserRole();
+  }, []);
+
+  if (isLoading) {
+    return null; // Show a loading spinner or placeholder if needed
+  }
 
   return (
     <NavigationContainer>
@@ -41,9 +47,10 @@ function AppNavigator() {
       >
         <Stack.Screen 
           name="MainTabs" 
-          component={TabNavigator} 
-          options={{ headerShown: false }} 
-        />
+          options={{ headerShown: false }}
+        >
+          {() => <BottomTabNavigator userRole={userRole} />}
+        </Stack.Screen>
         <Stack.Screen 
           name="OrderDetails" 
           component={OrderDetailsScreen}

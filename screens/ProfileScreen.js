@@ -15,7 +15,7 @@ import {
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
 import { Camera } from 'expo-camera';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from "expo-secure-store"; // Import Secure Store
 import BASE_URL from "../config"; // Import BASE_URL
 import { LinearGradient } from 'expo-linear-gradient';
 import Toast from 'react-native-toast-message';
@@ -71,8 +71,8 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     const checkLoginStatus = async () => {
-      const token = await getSecureItem('token');
-      const userId = await getSecureItem('userId');
+      const token = await SecureStore.getItemAsync('token');
+      const userId = await SecureStore.getItemAsync('userId');
       if (token && userId) {
         console.log('User is logged in with token:', token); // Add this line
         setLoggedIn(true);
@@ -92,8 +92,8 @@ export default function ProfileScreen() {
 
     // Set the callback to refresh orders when a new order is placed
     setOnOrderPlaced(() => async () => {
-      const token = await getSecureItem('token');
-      const userId = await getSecureItem('userId');
+      const token = await SecureStore.getItemAsync('token');
+      const userId = await SecureStore.getItemAsync('userId');
       if (token && userId) {
         fetchUserOrders(userId, token);
       }
@@ -110,8 +110,8 @@ export default function ProfileScreen() {
   useFocusEffect(
     React.useCallback(() => {
       const refreshOrders = async () => {
-        const token = await getSecureItem('token');
-        const userId = await getSecureItem('userId');
+        const token = await SecureStore.getItemAsync('token');
+        const userId = await SecureStore.getItemAsync('userId');
         if (token && userId) {
           fetchUserOrders(userId, token); // Fetch updated orders when screen is focused
         }
@@ -145,7 +145,7 @@ export default function ProfileScreen() {
         }),
       });
 
-      const pendingNotifications = await AsyncStorage.getItem('pendingNotifications');
+      const pendingNotifications = await SecureStore.getItemAsync('pendingNotifications');
       if (!pendingNotifications) return;
 
       const notifications = JSON.parse(pendingNotifications);
@@ -153,7 +153,7 @@ export default function ProfileScreen() {
       const otherNotifications = notifications.filter(n => n.data.userId !== userId);
 
       // Save notifications that aren't for this user
-      await AsyncStorage.setItem('pendingNotifications', JSON.stringify(otherNotifications));
+      await SecureStore.setItemAsync('pendingNotifications', JSON.stringify(otherNotifications));
 
       // Show notifications for this user
       for (const notification of userNotifications) {
@@ -174,7 +174,7 @@ export default function ProfileScreen() {
   // Add this function next to other notification functions
   const checkPendingProductNotifications = async (userId) => {
     try {
-      const pendingProductNotifications = await AsyncStorage.getItem('pendingProductNotifications');
+      const pendingProductNotifications = await SecureStore.getItemAsync('pendingProductNotifications');
       if (!pendingProductNotifications) return;
 
       const notifications = JSON.parse(pendingProductNotifications);
@@ -201,7 +201,7 @@ export default function ProfileScreen() {
       }
 
       // Clear the notifications after showing them
-      await AsyncStorage.removeItem('pendingProductNotifications');
+      await SecureStore.deleteItemAsync('pendingProductNotifications');
     } catch (error) {
       console.error('Error processing product notifications:', error);
     }
@@ -211,31 +211,30 @@ export default function ProfileScreen() {
     try {
       const res = await axios.post(`${BASE_URL}/api/auth/login`, { email, password });
       const { token, user } = res.data;
-      
-      await storeSecureItem('token', token);
-      await storeSecureItem('userId', user._id);
-      await storeSecureItem('userRole', user.role);
-      
-      // Check for both types of notifications
-      await checkPendingNotifications(user._id);
-      await checkPendingProductNotifications(user._id);
-      
+
+      await SecureStore.setItemAsync('token', token); // Store token securely
+      await SecureStore.setItemAsync('userId', user._id); // Store userId securely
+      await SecureStore.setItemAsync('userRole', user.role); // Store userRole securely
+
       setUserRole(user.role);
       setProfileImage(user.profileImage);
       setUserName(user.name);
       setLoggedIn(true);
-      
+
       Toast.show({
         type: 'success',
         text1: 'Logged in successfully! 👋'
       });
-      
+
       fetchUserOrders(user._id, token);
     } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Failed to login. Please try again.';
       Toast.show({
         type: 'error',
-        text1: 'Failed to login. Please try again.'
+        text1: 'Error',
+        text2: errorMessage,
       });
+      console.error("Login error:", error.response?.data || error.message);
     }
   };
 
@@ -256,9 +255,9 @@ export default function ProfileScreen() {
         });
         
         const data = await response.json();
-        await storeSecureItem('token', data.token);
-        await storeSecureItem('userId', data.user._id);
-        await storeSecureItem('userRole', data.user.role);
+        await SecureStore.setItemAsync('token', data.token);
+        await SecureStore.setItemAsync('userId', data.user._id);
+        await SecureStore.setItemAsync('userRole', data.user.role);
         
         setUserRole(data.user.role);
         setProfileImage(data.user.profileImage);
@@ -297,9 +296,9 @@ export default function ProfileScreen() {
         });
         
         const data = await response.json();
-        await storeSecureItem('token', data.token);
-        await storeSecureItem('userId', data.user._id);
-        await storeSecureItem('userRole', data.user.role);
+        await SecureStore.setItemAsync('token', data.token);
+        await SecureStore.setItemAsync('userId', data.user._id);
+        await SecureStore.setItemAsync('userRole', data.user.role);
         
         setUserRole(data.user.role);
         setProfileImage(data.user.profileImage);
@@ -472,7 +471,6 @@ export default function ProfileScreen() {
       };
 
       if (image?.base64) {
-        // Ensure the base64 string isn't too long
         if (image.base64.length > 1000000) { // If larger than ~1MB
           Toast.show({
             type: 'error',
@@ -511,9 +509,9 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = async () => {
-    await removeSecureItem('token');
-    await removeSecureItem('userId');
-    await removeSecureItem('userRole');
+    await SecureStore.deleteItemAsync('token');
+    await SecureStore.deleteItemAsync('userId');
+    await SecureStore.deleteItemAsync('userRole');
     setUserRole(null);
     setLoggedIn(false);
     setUserName("");
@@ -529,8 +527,8 @@ export default function ProfileScreen() {
 
   const handleReviewSubmit = async () => {
     try {
-      const token = await getSecureItem('token');
-      const userId = await getSecureItem('userId');
+      const token = await SecureStore.getItemAsync('token');
+      const userId = await SecureStore.getItemAsync('userId');
       if (!selectedProduct) {
         Toast.show({
           type: 'error',
@@ -581,8 +579,8 @@ export default function ProfileScreen() {
 
   const handleUpdateProfile = async () => {
     try {
-      const token = await getSecureItem('token');
-      const userId = await getSecureItem('userId');
+      const token = await SecureStore.getItemAsync('token');
+      const userId = await SecureStore.getItemAsync('userId');
       
       const updateData = {
         name: editName,
@@ -621,7 +619,6 @@ export default function ProfileScreen() {
         text1: 'Error',
         text2: 'Failed to update profile',
         visibilityTime: 3000,
-        position: 'top',
       });
     }
   };
