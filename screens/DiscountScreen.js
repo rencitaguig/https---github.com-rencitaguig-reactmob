@@ -13,7 +13,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchDiscounts, createDiscount, updateDiscount, deleteDiscount } from '../store/discountSlice';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function DiscountScreen() {
@@ -36,7 +36,7 @@ export default function DiscountScreen() {
 
   const loadDiscounts = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await SecureStore.getItemAsync('token');
       if (!token) {
         setMessage('Please login first');
         return;
@@ -57,7 +57,7 @@ export default function DiscountScreen() {
 
   const handleSubmit = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await SecureStore.getItemAsync('token');
       if (!token) {
         setMessage('Please login first');
         return;
@@ -129,7 +129,7 @@ export default function DiscountScreen() {
 
   const handleDelete = async (id) => {
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await SecureStore.getItemAsync('token');
       if (!token) {
         setMessage('Please login first');
         return;
