@@ -33,25 +33,32 @@ const windowHeight = Dimensions.get('window').height;
 // Add this constant at the top of your file
 const BANNER_OPTIONS = ['none', 'new', 'sale', 'top'];
 
-async function schedulePushNotification(title, body, orderId) {
-  if (!orderId) {
-    console.error('OrderId is required for notifications');
-    return;
-  }
-
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data: { orderId }, // Ensure orderId is properly set
+async function schedulePushNotification(title, body, orderId, userId) {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      data: { 
+        orderId,
+        userId, // Include userId in notification data
+        screen: 'OrderDetails' // Add screen name for navigation
       },
-      trigger: null,
-    });
-  } catch (error) {
-    console.error('Error scheduling notification:', error);
-  }
+    },
+    trigger: null,
+  });
 }
+
+// Add this function near the top
+const storeNotification = async (notification) => {
+  try {
+    const existingNotifications = await AsyncStorage.getItem('pendingNotifications');
+    const notifications = existingNotifications ? JSON.parse(existingNotifications) : [];
+    notifications.push(notification);
+    await AsyncStorage.setItem('pendingNotifications', JSON.stringify(notifications));
+  } catch (error) {
+    console.error('Error storing notification:', error);
+  }
+};
 
 export default function AdminScreen() {
   const dispatch = useDispatch();
@@ -135,24 +142,33 @@ export default function AdminScreen() {
   };
 
   const handleUpdateOrderStatus = async () => {
-    if (!selectedOrder) {
-      setMessage("Please select an order.");
-      return;
-    }
+    if (!selectedOrder) return;
+  
     try {
-      await updateOrderStatus(selectedOrder, status);
-      setUpdateMessage("Order status updated successfully!");
+      const orderToUpdate = orders.find(order => order._id === selectedOrder);
       
-      // Send push notification
-      const notificationTitle = "Order Status Update";
-      const notificationBody = `Order #${selectedOrder.slice(-6)} has been updated to ${status}`;
-      await schedulePushNotification(notificationTitle, notificationBody, selectedOrder);
+      await updateOrderStatus(selectedOrder, status);
+      
+      // Store notification instead of showing it immediately
+      const notification = {
+        title: "Order Status Update",
+        body: `Order #${selectedOrder.slice(-6)} has been updated to ${status}`,
+        data: {
+          orderId: selectedOrder,
+          userId: orderToUpdate.userId._id,
+          screen: 'OrderDetails'
+        }
+      };
 
-      setSelectedOrder(null);
-      setTimeout(() => setUpdateMessage(""), 3000);
+      await storeNotification(notification);
+      
+      Toast.show({
+        type: 'success',
+        text1: 'Order status updated successfully'
+      });
+
     } catch (error) {
-      setUpdateMessage("Failed to update order status.");
-      console.error("Error updating order:", error);
+      console.error('Error updating order:', error);
     }
   };
 

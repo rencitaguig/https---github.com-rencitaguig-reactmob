@@ -8,15 +8,15 @@ export default function OrderDetailsScreen({ route }) {
   const [order, setOrder] = useState(null);
 
   useEffect(() => {
-    const orderDetails = orders.find(o => o._id === orderId);
-    setOrder(orderDetails);
+    if (orderId && orders?.length) {
+      const foundOrder = orders.find(o => o._id === orderId);
+      console.log('Found order:', foundOrder); // Debug log
+      if (foundOrder) {
+        console.log('Order items:', foundOrder.items); // Debug items
+      }
+      setOrder(foundOrder);
+    }
   }, [orderId, orders]);
-
-  const calculateItemTotal = (item) => {
-    const price = item?.product?.price || 0;
-    const quantity = item?.quantity || 0;
-    return (price * quantity).toFixed(2);
-  };
 
   if (!order) {
     return (
@@ -30,38 +30,45 @@ export default function OrderDetailsScreen({ route }) {
     <ScrollView style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.header}>Order Details</Text>
-        <Text style={styles.orderNumber}>Order #{order._id?.slice(-6) || 'N/A'}</Text>
+        <Text style={styles.orderNumber}>Order #{order._id?.slice(-6)}</Text>
         
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
-          <Text style={styles.statusText}>{order.status || 'Unknown'}</Text>
+          <Text style={styles.statusText}>{order.status}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Items</Text>
-        {(order.items || []).map((item, index) => (
+        <Text style={styles.sectionTitle}>Items Ordered</Text>
+        {order.items?.map((item, index) => (
           <View key={index} style={styles.itemCard}>
-            <Text style={styles.itemName}>
-              {item?.product?.name || 'Product Unavailable'}
-            </Text>
-            <Text style={styles.itemQuantity}>
-              Quantity: {item?.quantity || 0}
-            </Text>
-            <Text style={styles.itemPrice}>
-              ₱{calculateItemTotal(item)}
-            </Text>
+            <View style={styles.itemHeader}>
+              {/* Debug log the item */}
+              {console.log('Rendering item:', item)}
+              <Text style={styles.itemName}>{item?.name || 'N/A'}</Text>
+              <Text style={styles.itemQuantity}>Quantity: {item?.quantity || 0}</Text>
+            </View>
+            
+            <View style={styles.priceDetails}>
+              <Text style={styles.itemPrice}>
+                Price: ₱{(item?.price || 0).toFixed(2)}
+              </Text>
+              <Text style={styles.itemTotal}>
+                Subtotal: ₱{((item?.price || 0) * (item?.quantity || 0)).toFixed(2)}
+              </Text>
+            </View>
           </View>
         ))}
 
         <View style={styles.totalSection}>
           <Text style={styles.totalLabel}>Total Amount:</Text>
           <Text style={styles.totalAmount}>
-            ₱{(order.totalAmount || 0).toFixed(2)}
+            ₱{(order.totalPrice || 0).toFixed(2)}
           </Text>
         </View>
 
+        <Text style={styles.userInfo}>
+          Customer: {order.userId?.name || 'N/A'}
+        </Text>
         <Text style={styles.dateText}>
-          Ordered on: {order.createdAt 
-            ? new Date(order.createdAt).toLocaleDateString() 
-            : 'Date not available'}
+          Ordered on: {new Date(order.createdAt).toLocaleDateString()}
         </Text>
       </View>
     </ScrollView>
@@ -129,21 +136,37 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 10,
   },
+  itemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   itemName: {
     fontSize: 16,
     fontWeight: '500',
     color: '#3E2723',
+    flex: 1,
   },
   itemQuantity: {
-    fontSize: 14,
-    color: '#5D4037',
-    marginTop: 5,
-  },
-  itemPrice: {
     fontSize: 16,
     fontWeight: '600',
     color: '#8B4513',
+    marginLeft: 10,
+  },
+  priceDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: 5,
+  },
+  itemPrice: {
+    fontSize: 14,
+    color: '#5D4037',
+  },
+  itemTotal: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#8B4513',
   },
   totalSection: {
     flexDirection: 'row',

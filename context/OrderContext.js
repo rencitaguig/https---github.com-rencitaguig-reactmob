@@ -23,6 +23,7 @@ export const OrderProvider = ({ children }) => {
       const response = await axios.get(`${BASE_URL}/api/orders`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('Fetched Orders:', response.data); // Debug log
       setOrders(response.data); // Fetch all orders without filtering by user ID
     } catch (error) {
       console.error("Error fetching orders:", error.response ? error.response.data : error.message);

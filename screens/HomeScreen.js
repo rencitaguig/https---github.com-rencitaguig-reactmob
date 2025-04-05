@@ -8,11 +8,13 @@ import { CartContext } from "../context/CartContext";
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from '@expo/vector-icons';
+import { StarRating } from '../components/StarRating';
+import Toast from 'react-native-toast-message';
 
 export default function HomeScreen({ navigation }) {
   const dispatch = useDispatch();
   const { products, loading: productsLoading } = useSelector((state) => state.products);
-  const { reviews, loading: reviewsLoading } = useSelector((state) => state.reviews);
+  const { reviews, loading: reviewsLoading, updateLoading, deleteLoading } = useSelector((state) => state.reviews);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -29,6 +31,7 @@ export default function HomeScreen({ navigation }) {
   const [showPriceFilter, setShowPriceFilter] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const drawerAnim = useRef(new Animated.Value(-300)).current;
+  const [user, setUser] = useState(null);
 
   const handleAddToCart = async (item) => {
     await addToCart(item);
@@ -44,28 +47,139 @@ export default function HomeScreen({ navigation }) {
     setModalVisible(true);
   };
 
-  const handleEditReview = (review) => {
-    if (!review._id) {
-      console.warn('Review missing ID:', review);
-      return;
+  const handleEditReview = async (review) => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      console.log('Current userId:', userId);
+      console.log('Review userId:', review.userId._id);
+      
+      if (!userId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Please log in to edit reviews'
+        });
+        return;
+      }
+
+      if (userId !== review.userId._id) {
+        Toast.show({
+          type: 'error',
+          text1: 'You can only edit your own reviews'
+        });
+        return;
+      }
+
+      setSelectedReview(review);
+      setEditRating(review.rating.toString());
+      setEditComment(review.comment);
+      setEditModalVisible(true);
+      setModalVisible(false);
+    } catch (error) {
+      console.error('Edit review error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error editing review',
+        text2: error.message
+      });
     }
-    console.log('Opening edit modal for review:', review); // Add logging
-    setSelectedReview(review);
-    setEditRating(review.rating.toString());
-    setEditComment(review.comment);
-    setEditModalVisible(true); // Make sure this is being called
-    setModalVisible(false); // Close the product modal first
   };
 
   const handleUpdateReview = async () => {
-    const token = await AsyncStorage.getItem("token");
-    dispatch(updateReview({ reviewId: selectedReview._id, updatedData: { rating: editRating, comment: editComment }, token }));
-    setEditModalVisible(false);
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const userId = await AsyncStorage.getItem('userId');
+      
+      if (!token || !userId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Please log in to update reviews'
+        });
+        return;
+      }
+
+      const updatedData = {
+        rating: parseInt(editRating),
+        comment: editComment
+      };
+
+      await dispatch(updateReview({
+        reviewId: selectedReview._id,
+        updatedData,
+        token
+      })).unwrap();
+
+      // Refresh reviews and update UI
+      if (selectedProduct?._id) {
+        await dispatch(fetchReviews(selectedProduct._id));
+      }
+
+      setEditModalVisible(false);
+      setModalVisible(true);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Review updated successfully'
+      });
+    } catch (error) {
+      console.error('Update review error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Failed to update review',
+        text2: error.message
+      });
+    }
   };
 
   const handleDeleteReview = async (reviewId) => {
-    const token = await AsyncStorage.getItem("token");
-    dispatch(deleteReview({ reviewId, token }));
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const userId = await AsyncStorage.getItem('userId');
+      
+      if (!token || !userId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Please log in to delete reviews'
+        });
+        return;
+      }
+
+      const reviewToDelete = reviews.find(review => review._id === reviewId);
+      
+      if (!reviewToDelete) {
+        Toast.show({
+          type: 'error',
+          text1: 'Review not found'
+        });
+        return;
+      }
+
+      if (userId !== reviewToDelete.userId._id) {
+        Toast.show({
+          type: 'error',
+          text1: 'You can only delete your own reviews'
+        });
+        return;
+      }
+
+      await dispatch(deleteReview({ reviewId, token })).unwrap();
+      
+      // Refresh reviews
+      if (selectedProduct?._id) {
+        dispatch(fetchReviews(selectedProduct._id));
+      }
+
+      Toast.show({
+        type: 'success',
+        text1: 'Review deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete review error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Failed to delete review',
+        text2: error.message
+      });
+    }
   };
 
   useEffect(() => {
@@ -124,6 +238,21 @@ export default function HomeScreen({ navigation }) {
         return '#E0E0E0';
     }
   };
+
+  useEffect(() => {
+    const getUserData = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        console.log('Current logged in userId:', userId); // Debug log
+        if (userId) {
+          setUser({ userId: userId }); // Store just the ID string
+        }
+      } catch (error) {
+        console.error('Error getting user data:', error);
+      }
+    };
+    getUserData();
+  }, []);
 
   return (
     <LinearGradient
@@ -277,22 +406,42 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.modalTitle}>Reviews:</Text>
               <FlatList
                 data={reviews}
-                keyExtractor={(item) => `review-${item._id}`} // Added prefix for uniqueness
-                renderItem={({ item }) => (
-                  <View key={`item-${item._id}-${reviews.indexOf(item)}`} style={styles.reviewCard}>
-                    <Text style={styles.reviewText}>Rating: {item.rating}</Text>
-                    <Text style={styles.reviewText}>Comment: {item.comment}</Text>
-                    <Text style={styles.reviewText}>By: {item.userId.name}</Text>
-                    <View style={styles.actionButtons}>
-                      <TouchableOpacity onPress={() => handleEditReview(item)} style={styles.editButton}>
-                        <Text style={styles.editButtonText}>Edit</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleDeleteReview(item._id)} style={styles.deleteButton}>
-                        <Text style={styles.deleteButtonText}>Delete</Text>
-                      </TouchableOpacity>
+                keyExtractor={(item) => `review-${item._id}`}
+                renderItem={({ item }) => {
+                  // Debug logs
+                  console.log('Review userId:', item.userId._id);
+                  console.log('Current user:', user?.userId);
+                  console.log('Do they match?', user?.userId === item.userId._id);
+                  
+                  return (
+                    <View key={`item-${item._id}`} style={styles.reviewCard}>
+                      <StarRating rating={Number(item.rating)} size={16} />
+                      <Text style={styles.reviewText}>Comment: {item.comment}</Text>
+                      <Text style={styles.reviewText}>By: {item.userId.name}</Text>
+                      {/* Show buttons for all reviews while debugging */}
+                      <View style={styles.actionButtons}>
+                        <TouchableOpacity 
+                          onPress={() => handleEditReview(item)} 
+                          style={styles.editButton}
+                          disabled={updateLoading}
+                        >
+                          <Text style={styles.editButtonText}>
+                            Edit ({user?.userId === item.userId._id ? 'Owner' : 'Not Owner'})
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          onPress={() => handleDeleteReview(item._id)} 
+                          style={styles.deleteButton}
+                          disabled={deleteLoading}
+                        >
+                          <Text style={styles.deleteButtonText}>
+                            Delete
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
-                )}
+                  );
+                }}
               />
               <TouchableOpacity
                 style={styles.closeButton}
@@ -315,13 +464,12 @@ export default function HomeScreen({ navigation }) {
           <ScrollView style={styles.modalScrollView}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Edit Your Review</Text>
-              <TextInput
-                placeholder="Rating (1-5)"
-                value={editRating}
-                onChangeText={setEditRating}
-                keyboardType="numeric"
-                style={styles.input}
-                placeholderTextColor="#3E2723"
+              <Text style={styles.ratingLabel}>Rating:</Text>
+              <StarRating 
+                rating={Number(editRating)} 
+                size={30}
+                readonly={false}
+                onRatingChange={(value) => setEditRating(value.toString())}
               />
               <TextInput
                 placeholder="Comment"
@@ -329,13 +477,16 @@ export default function HomeScreen({ navigation }) {
                 onChangeText={setEditComment}
                 style={[styles.input, styles.textArea]}
                 multiline
-                numberOfLine
-                placeholderTextColor="#3E2s={4}723"
+                numberOfLines={4}
+                placeholderTextColor="#3E2723"
               />
               <TouchableOpacity style={styles.updateButton} onPress={handleUpdateReview}>
                 <Text style={styles.updateButtonText}>Submit Update</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.cancelButton, { marginBottom: 20 }]} onPress={() => setEditModalVisible(false)}>
+              <TouchableOpacity 
+                style={[styles.cancelButton, { marginBottom: 20 }]} 
+                onPress={() => setEditModalVisible(false)}
+              >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
             </View>
@@ -765,5 +916,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "600",
     fontSize: 16
+  },
+  ratingLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3E2723',
+    marginBottom: 10,
   }
 });

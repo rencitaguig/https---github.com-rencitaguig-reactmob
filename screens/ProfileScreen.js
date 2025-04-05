@@ -27,6 +27,9 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Facebook from 'expo-facebook';
 import * as Google from 'expo-auth-session/providers/google';
 import { storeSecureItem, getSecureItem, removeSecureItem } from '../utils/secureStorage';
+import { FontAwesome } from '@expo/vector-icons';
+import { StarRating } from '../components/StarRating';
+import * as Notifications from 'expo-notifications';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -131,35 +134,107 @@ export default function ProfileScreen() {
     }
   };
 
+  const checkPendingNotifications = async (userId) => {
+    try {
+      // Add notification handler setup
+      await Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        }),
+      });
+
+      const pendingNotifications = await AsyncStorage.getItem('pendingNotifications');
+      if (!pendingNotifications) return;
+
+      const notifications = JSON.parse(pendingNotifications);
+      const userNotifications = notifications.filter(n => n.data.userId === userId);
+      const otherNotifications = notifications.filter(n => n.data.userId !== userId);
+
+      // Save notifications that aren't for this user
+      await AsyncStorage.setItem('pendingNotifications', JSON.stringify(otherNotifications));
+
+      // Show notifications for this user
+      for (const notification of userNotifications) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: notification.title,
+            body: notification.body,
+            data: notification.data,
+          },
+          trigger: null,
+        });
+      }
+    } catch (error) {
+      console.error('Error processing pending notifications:', error);
+    }
+  };
+
+  // Add this function next to other notification functions
+  const checkPendingProductNotifications = async (userId) => {
+    try {
+      const pendingProductNotifications = await AsyncStorage.getItem('pendingProductNotifications');
+      if (!pendingProductNotifications) return;
+
+      const notifications = JSON.parse(pendingProductNotifications);
+      
+      // Show notifications with appropriate banner styling
+      for (const notification of notifications) {
+        let title = notification.title;
+        const banner = notification.data.banner;
+        
+        // Add emoji based on banner type
+        if (banner === 'new') title = '🆕 ' + title;
+        if (banner === 'sale') title = '🏷️ ' + title;
+        if (banner === 'hot') title = '🔥 ' + title;
+        if (banner === 'top') title = '⭐ ' + title;
+
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title,
+            body: notification.body,
+            data: notification.data,
+          },
+          trigger: null,
+        });
+      }
+
+      // Clear the notifications after showing them
+      await AsyncStorage.removeItem('pendingProductNotifications');
+    } catch (error) {
+      console.error('Error processing product notifications:', error);
+    }
+  };
+
   const handleLogin = async () => {
     try {
       const res = await axios.post(`${BASE_URL}/api/auth/login`, { email, password });
       const { token, user } = res.data;
       
-      console.log('Login successful, token:', token); // Add this line
-      
       await storeSecureItem('token', token);
       await storeSecureItem('userId', user._id);
       await storeSecureItem('userRole', user.role);
+      
+      // Check for both types of notifications
+      await checkPendingNotifications(user._id);
+      await checkPendingProductNotifications(user._id);
+      
       setUserRole(user.role);
       setProfileImage(user.profileImage);
       setUserName(user.name);
       setLoggedIn(true);
+      
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Logged in successfully! 👋',
-        visibilityTime: 3000,
-        position: 'top',
+        text1: 'Logged in successfully! 👋'
       });
+      
       fetchUserOrders(user._id, token);
     } catch (error) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Failed to login. Please try again.',
-        visibilityTime: 3000,
-        position: 'top',
+        text1: 'Failed to login. Please try again.'
       });
     }
   };
@@ -665,20 +740,20 @@ export default function ProfileScreen() {
         <Text style={styles.text}>Your Orders:</Text>
         <FlatList
           data={userOrders}
-          keyExtractor={(item) => (item._id ? item._id.toString() : "undefined")}
+          keyExtractor={(item) => item._id}
           renderItem={({ item }) => (
             <View style={styles.orderCard}>
               <Text style={styles.orderText}>Order ID: {item._id}</Text>
-              <Text style={styles.orderText}>Total Price: ${item.totalPrice}</Text>
+              <Text style={styles.orderText}>Total Price: ₱{item.totalPrice}</Text>
               <Text style={styles.orderText}>Status: {item.status}</Text>
               <FlatList
                 data={item.items}
-                keyExtractor={(item) => (item.productId ? item.productId.toString() : "undefined")}
+                keyExtractor={(item, index) => `${item.productId}-${index}`}
                 renderItem={({ item }) => (
                   <View style={styles.itemCard}>
                     <Text style={styles.itemText}>{item.name}</Text>
                     <Text style={styles.itemText}>Quantity: {item.quantity}</Text>
-                    <Text style={styles.itemText}>Price: ${item.price}</Text>
+                    <Text style={styles.itemText}>Price: ₱{item.price}</Text>
                   </View>
                 )}
               />
@@ -710,36 +785,35 @@ export default function ProfileScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Write a Review</Text>
             <Text style={styles.text}>Select a Product:</Text>
-            {selectedOrder && selectedOrder.items ? ( // Add null check for selectedOrder and items
+            {selectedOrder && selectedOrder.items && (
               <FlatList
-                data={selectedOrder.items} // List products in the selected order
-                keyExtractor={(item) => item.productId}
+                data={selectedOrder.items}
+                keyExtractor={(item, index) => `${item.productId}-${index}`}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[
                       styles.productCard,
                       selectedProduct?.productId === item.productId && styles.selectedProductCard
                     ]}
-                    onPress={() => setSelectedProduct(item)} // Set selected product
+                    onPress={() => setSelectedProduct(item)}
                   >
                     <Text style={styles.productName}>{item.name}</Text>
                     <Text style={styles.productPrice}>₱{item.price.toFixed(2)}</Text>
                   </TouchableOpacity>
                 )}
               />
-            ) : (
-              <Text style={styles.text}>No products found in this order.</Text> // Fallback message
             )}
-            <TextInput
-              placeholder="Rating (1-5)"
-              value={rating.toString()}
-              onChangeText={setRating}
-              keyboardType="numeric"
-              style={styles.input}
-              placeholderTextColor="#3E2723"
+            
+            <Text style={styles.ratingLabel}>Rate this product:</Text>
+            <StarRating 
+              rating={rating} 
+              size={30} 
+              readonly={false} 
+              onRatingChange={(value) => setRating(value)} 
             />
+            
             <TextInput
-              placeholder="Comment"
+              placeholder="Write your review here..."
               value={comment}
               onChangeText={setComment}
               style={[styles.input, styles.textArea]}
@@ -747,11 +821,16 @@ export default function ProfileScreen() {
               numberOfLines={4}
               placeholderTextColor="#3E2723"
             />
-            <TouchableOpacity style={styles.button} onPress={handleReviewSubmit}>
+            
+            <TouchableOpacity style={styles.submitButton} onPress={handleReviewSubmit}>
               <Text style={styles.buttonText}>Submit Review</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, { marginBottom: 20 }]} onPress={() => setReviewModalVisible(false)}>
-              <Text style={styles.buttonText}>Cancel</Text>
+            
+            <TouchableOpacity 
+              style={[styles.cancelButton, { marginBottom: 20 }]} 
+              onPress={() => setReviewModalVisible(false)}
+            >
+              <Text style={[styles.buttonText, { color: '#3E2723' }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -1143,5 +1222,28 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 14,
     color: '#5D4037',
+  },
+  starContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 15,
+  },
+  star: {
+    marginHorizontal: 5,
+  },
+  ratingLabel: {
+    fontSize: 16,
+    color: '#3E2723',
+    textAlign: 'center',
+    marginTop: 15,
+  },
+  submitButton: {
+    backgroundColor: '#8B4513',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginVertical: 10,
+    elevation: 3,
   },
 });
