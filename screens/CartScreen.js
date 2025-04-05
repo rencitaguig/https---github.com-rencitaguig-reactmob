@@ -21,16 +21,36 @@ export default function CartScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [discountCode, setDiscountCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(null);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const { discounts } = useSelector((state) => state.discounts);
 
   const handleCheckout = async () => {
-    const userId = await SecureStore.getItemAsync('userId'); // Use Secure Store to get userId
-    if (!userId) {
-      Alert.alert("Error", "No user ID found. Please log in again.");
-      return; // Exit if userId is not found
+    if (isSubmittingOrder) return;
+    setIsSubmittingOrder(true);
+
+    try {
+        const userId = await SecureStore.getItemAsync('userId');
+        const token = await SecureStore.getItemAsync('token');
+        
+        if (!userId || !token) {
+            Alert.alert("Error", "Please log in to continue.");
+            return;
+        }
+
+        const finalPrice = calculateFinalPrice();
+        await checkout(finalPrice); // Pass the discounted price to checkout
+        setModalVisible(false);
+        setAppliedDiscount(null);
+        Alert.alert("Success", "Order placed successfully!");
+    } catch (error) {
+        console.error("Checkout error:", error);
+        Alert.alert(
+            "Error",
+            error.response?.data?.message || "Network error. Please check your connection."
+        );
+    } finally {
+        setIsSubmittingOrder(false);
     }
-    checkout();
-    setModalVisible(false);
   };
 
   const applyDiscount = () => {

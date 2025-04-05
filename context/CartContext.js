@@ -36,7 +36,7 @@ export const CartProvider = ({ children }) => {
     return [];
   };
 
-  const checkout = async () => {
+  const checkout = async (discountedPrice = null) => {
     if (cart.length === 0) return;
 
     try {
@@ -68,7 +68,8 @@ export const CartProvider = ({ children }) => {
           quantity: 1, // Assuming quantity is 1
           price: item.price,
         })),
-        totalPrice: cart.reduce((sum, item) => sum + item.price, 0),
+        totalPrice: discountedPrice || cart.reduce((sum, item) => sum + item.price, 0),
+        originalPrice: cart.reduce((sum, item) => sum + item.price, 0),
       };
 
       const response = await axios.post(`${BASE_URL}/api/orders`, orderData, {
