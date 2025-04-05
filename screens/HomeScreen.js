@@ -14,7 +14,7 @@ import * as SecureStore from "expo-secure-store"; // Import SecureStore
 import axios from "axios";
 import BASE_URL from "../config"; // Import BASE_URL
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const { products, loading: productsLoading } = useSelector((state) => state.products);
   const { reviews, loading: reviewsLoading, deleteLoading } = useSelector((state) => state.reviews);
@@ -34,7 +34,16 @@ export default function HomeScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editRating, setEditRating] = useState("");
-  const [editComment, setEditComment] = useState("");
+
+  // Replace the notifications useEffect with this simpler navigation handler
+  useEffect(() => {
+    if (route.params?.productId && route.params?.showProductModal) {
+      const product = products.find(p => p._id === route.params.productId);
+      if (product) {
+        handleProductSelect(product);
+      }
+    }
+  }, [route.params?.productId, route.params?.showProductModal, products]);
 
   const handleAddToCart = async (item) => {
     await addToCart(item);

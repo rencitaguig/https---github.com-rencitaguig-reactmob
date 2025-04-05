@@ -15,6 +15,9 @@ import { fetchDiscounts, createDiscount, updateDiscount, deleteDiscount } from '
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
+import axios from 'axios';
+import BASE_URL from '../config'; // Add this import
+import * as Notifications from 'expo-notifications';
 
 export default function DiscountScreen() {
   const dispatch = useDispatch();
@@ -84,15 +87,7 @@ export default function DiscountScreen() {
         code: code.trim().toUpperCase(),
         percentage: percentageNum,
         expiryDate: expiryDate.toISOString(),
-        isActive: true
-      };
-
-      // Add headers to the request
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        isActive: true,
       };
 
       if (isEditing && selectedDiscount) {
@@ -103,10 +98,36 @@ export default function DiscountScreen() {
         })).unwrap();
         setMessage('Discount updated successfully');
       } else {
-        await dispatch(createDiscount({ 
+        const result = await dispatch(createDiscount({ 
           data: discountData,
           token 
         })).unwrap();
+        
+        // Store notification with correct data
+        try {
+          const pendingNotifs = await SecureStore.getItemAsync('pendingDiscountNotifications');
+          const notifications = pendingNotifs ? JSON.parse(pendingNotifs) : [];
+          
+          const notificationData = {
+            id: result._id,
+            title: '🎉 New Discount Available!',
+            body: `Get ${result.percentage}% off with code: ${result.code}`,
+            data: {
+              screen: 'DiscountDetailsScreen',
+              discountId: result._id,
+            },
+            code: result.code,
+            percentage: result.percentage,
+            expiryDate: result.expiryDate
+          };
+          
+          notifications.push(notificationData);
+          await SecureStore.setItemAsync('pendingDiscountNotifications', JSON.stringify(notifications));
+          console.log('Stored notification:', notificationData); // Debug log
+        } catch (error) {
+          console.error('Failed to store notification:', error);
+        }
+        
         setMessage('Discount created successfully');
       }
 

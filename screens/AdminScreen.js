@@ -26,11 +26,71 @@ import { useDispatch } from 'react-redux';
 import { fetchProducts as fetchHomeProducts } from '../store/productSlice';
 import { Camera } from 'expo-camera';
 import * as SecureStore from "expo-secure-store"; // Import Secure Store
+import { storeOrderStatusNotification } from '../notifications/OrderStatusNotification';
 
 const windowHeight = Dimensions.get('window').height;
 
 // Add this constant at the top of your file
 const BANNER_OPTIONS = ['none', 'new', 'sale', 'top'];
+
+// Add this helper function near the top
+const storeOrderNotification = async (order, newStatus) => {
+  try {
+    const notification = {
+      title: "Order Status Update",
+      body: `Order #${order._id.slice(-6)} has been updated to ${newStatus}`,
+      data: {
+        orderId: order._id,
+        userId: order.userId._id,
+        screen: 'NotificationsDetails'
+      }
+    };
+
+    const existingNotifications = await SecureStore.getItemAsync('pendingOrderNotifications');
+    const notifications = existingNotifications ? JSON.parse(existingNotifications) : [];
+    notifications.push(notification);
+    await SecureStore.setItemAsync('pendingOrderNotifications', JSON.stringify(notifications));
+  } catch (error) {
+    console.error('Error storing notification:', error);
+  }
+};
+
+// Add this helper function near the top of the file
+const storeProductNotification = async (product, banner) => {
+  try {
+    let title = 'New Product Alert!';
+    let body = `Check out our new product: ${product.name}`;
+
+    // Customize notification based on banner type
+    if (banner === 'sale') {
+      title = 'Special Sale!';
+      body = `Don't miss out! ${product.name} is on sale!`;
+    } else if (banner === 'hot') {
+      title = 'Hot Product!';
+      body = `${product.name} is trending! Get it while it's hot!`;
+    } else if (banner === 'top') {
+      title = 'Top Rated Product!';
+      body = `Discover our top-rated ${product.name}!`;
+    }
+
+    const notification = {
+      title,
+      body,
+      data: {
+        productId: product._id,
+        banner: banner || 'new',
+        screen: 'Product',
+      }
+    };
+
+    const existingNotifications = await SecureStore.getItemAsync('pendingProductNotifications');
+    const notifications = existingNotifications ? JSON.parse(existingNotifications) : [];
+    notifications.push(notification);
+    await SecureStore.setItemAsync('pendingProductNotifications', JSON.stringify(notifications));
+  } catch (error) {
+    console.error('Error storing product notification:', error);
+  }
+};
 
 export default function AdminScreen() {
   const dispatch = useDispatch();
@@ -85,10 +145,24 @@ export default function AdminScreen() {
       return;
     }
     try {
-      await updateOrderStatus(selectedOrder, status); // Call updateOrderStatus without passing token
+      const orderToUpdate = orders.find(order => order._id === selectedOrder);
+      await updateOrderStatus(selectedOrder, status);
+      
+      // Store notification with complete order data
+      await storeOrderStatusNotification({
+        ...orderToUpdate,
+        status: status,
+        items: orderToUpdate.items,
+        totalPrice: orderToUpdate.totalPrice,
+        createdAt: orderToUpdate.createdAt
+      }, status);
+      
       setUpdateMessage("Order status updated successfully!");
-      setSelectedOrder(null); // Clear selection after update
-      setTimeout(() => setUpdateMessage(""), 3000); // Clear message after 3 seconds
+      setSelectedOrder(null);
+      setTimeout(() => setUpdateMessage(""), 3000);
+      
+      // Refresh orders list
+      await fetchOrders();
     } catch (error) {
       setUpdateMessage("Failed to update order status.");
       console.error("Error updating order:", error);
@@ -210,12 +284,15 @@ export default function AdminScreen() {
         productData.image = `data:image/jpeg;base64,${productImage.base64}`;
       }
 
+      let response;
       if (isEditing) {
-        await updateProduct(selectedProduct._id, productData, token);
+        response = await updateProduct(selectedProduct._id, productData, token);
         setCreateProductMessage("Product updated successfully!");
       } else {
-        await createProduct(productData, token);
+        response = await createProduct(productData, token);
         setCreateProductMessage("Product created successfully!");
+        // Store notification for new product
+        await storeProductNotification(response, productData.banner);
       }
 
       // Clear form and refresh

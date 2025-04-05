@@ -21,7 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Toast from 'react-native-toast-message';
 import { CartContext } from "../context/CartContext"; // Import CartContext
 import { AuthContext } from '../context/AuthContext'; // Import AuthContext
-import { useFocusEffect } from "@react-navigation/native"; // Import useFocusEffect
+import { useFocusEffect, useNavigation } from "@react-navigation/native"; // Import useFocusEffect and useNavigation
 import * as ImageManipulator from "expo-image-manipulator"; // Import ImageManipulator
 import * as WebBrowser from 'expo-web-browser';
 import * as Facebook from 'expo-facebook';
@@ -30,6 +30,7 @@ import { storeSecureItem, getSecureItem, removeSecureItem } from '../utils/secur
 import { FontAwesome } from '@expo/vector-icons';
 import { StarRating } from '../components/StarRating';
 import * as Notifications from 'expo-notifications';
+import * as Clipboard from 'expo-clipboard';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -37,7 +38,65 @@ const FB_APP_ID = 'your_facebook_app_id';
 const GOOGLE_CLIENT_ID = 'your_google_client_id';
 const GOOGLE_ANDROID_CLIENT_ID = 'your_android_client_id';
 
+const checkNewDiscounts = async () => {
+  try {
+    const storedNotifs = await SecureStore.getItemAsync('newDiscountNotifications');
+    if (!storedNotifs) return;
+
+    const notifications = JSON.parse(storedNotifs);
+    if (notifications.length === 0) return;
+
+    // Show notification for each new discount
+    for (const discount of notifications) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🎉 New Discount Available!',
+          body: `Get ${discount.percentage}% off with code: ${discount.code}`,
+          data: {
+            screen: 'DiscountDetailsScreen', // Update screen name
+            discountId: discount.id
+          },
+        },
+        trigger: null, // Show immediately
+      });
+    }
+
+    // Clear the notifications after showing them
+    await SecureStore.setItemAsync('newDiscountNotifications', JSON.stringify([]));
+  } catch (error) {
+    console.error('Error checking new discounts:', error);
+  }
+};
+
+const checkPendingDiscounts = async () => {
+  try {
+    const pendingNotifs = await SecureStore.getItemAsync('pendingDiscountNotifications');
+    if (!pendingNotifs) return;
+    
+    const notifications = JSON.parse(pendingNotifs);
+    if (notifications.length === 0) return;
+
+    // Show notifications for all pending discounts
+    for (const discount of notifications) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🎉 New Discount Available!',
+          body: `Save ${discount.percentage}% with code: ${discount.code}\nValid until ${new Date(discount.expiryDate).toLocaleDateString()}`,
+          data: { screen: 'DiscountDetails', discountId: discount.id },
+        },
+        trigger: null,
+      });
+    }
+
+    // Clear notifications after showing them
+    await SecureStore.setItemAsync('pendingDiscountNotifications', JSON.stringify([]));
+  } catch (error) {
+    console.error('Error checking discounts:', error);
+  }
+};
+
 export default function ProfileScreen() {
+  const navigation = useNavigation();
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -74,10 +133,9 @@ export default function ProfileScreen() {
       const token = await SecureStore.getItemAsync('token');
       const userId = await SecureStore.getItemAsync('userId');
       if (token && userId) {
-        console.log('User is logged in with token:', token); // Add this line
         setLoggedIn(true);
         try {
-          const userRes = await axios.get(`${BASE_URL}/api/users/${userId}`, {
+          const userRes = await axios.get(`${BASE_URL}/api/users/profile`, {  // Updated endpoint
             headers: { Authorization: `Bearer ${token}` }
           });
           setUserName(userRes.data.name);
@@ -117,6 +175,21 @@ export default function ProfileScreen() {
         }
       };
       refreshOrders();
+    }, [])
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const refreshUserData = async () => {
+        const token = await SecureStore.getItemAsync('token');
+        const userId = await SecureStore.getItemAsync('userId');
+        if (token && userId) {
+          fetchUserOrders(userId, token);
+          // Check for new discounts whenever screen is focused
+          await checkNewDiscounts();
+        }
+      };
+      refreshUserData();
     }, [])
   );
 
@@ -207,6 +280,106 @@ export default function ProfileScreen() {
     }
   };
 
+  // Add this function after other notification functions
+  const checkPendingOrderNotifications = async () => {
+    try {
+      const pendingNotifications = await SecureStore.getItemAsync('pendingOrderNotifications');
+      if (!pendingNotifications) return;
+  
+      const notifications = JSON.parse(pendingNotifications);
+      const userId = await SecureStore.getItemAsync('userId');
+      
+      const userNotifications = notifications.filter(n => n.data.userId === userId);
+      const otherNotifications = notifications.filter(n => n.data.userId !== userId);
+  
+      // Save notifications that aren't for this user
+      await SecureStore.setItemAsync('pendingOrderNotifications', JSON.stringify(otherNotifications));
+  
+      // Show notifications for this user
+      for (const notification of userNotifications) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: notification.title,
+            body: notification.body,
+            data: notification.data,
+          },
+          trigger: null,
+        });
+      }
+    } catch (error) {
+      console.error('Error processing order notifications:', error);
+    }
+  };
+
+  // Add this function
+  const checkDiscountNotifications = async () => {
+    try {
+      const pendingDiscounts = await SecureStore.getItemAsync('pendingDiscounts');
+      if (!pendingDiscounts) return;
+
+      const discounts = JSON.parse(pendingDiscounts);
+      
+      // Show notifications for pending discounts
+      for (const discount of discounts) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'New Discount Available! 🎉',
+            body: `Use code ${discount.code} for ${discount.percentage}% off!`,
+            data: { 
+              screen: 'DiscountDetails',
+              discountId: discount._id 
+            },
+          },
+          trigger: null,
+        });
+      }
+
+      // Clear pending discounts after showing notifications
+      await SecureStore.deleteItemAsync('pendingDiscounts');
+    } catch (error) {
+      console.error('Error checking discount notifications:', error);
+    }
+  };
+
+  // Update the useEffect for notification setup
+  useEffect(() => {
+    const setupNotifications = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Please enable notifications to receive updates!');
+        return;
+      }
+
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        }),
+      });
+
+      const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+        const data = response.notification.request.content.data;
+        
+        if (data?.screen === 'DiscountDetailsScreen' && data?.discountId) {
+          // Get parent navigation
+          const rootNavigation = navigation.getParent();
+          if (rootNavigation) {
+            rootNavigation.navigate('DiscountDetailsScreen', { 
+              discountId: data.discountId 
+            });
+          }
+        }
+      });
+
+      return () => {
+        Notifications.removeNotificationSubscription(responseListener);
+      };
+    };
+
+    setupNotifications();
+  }, [navigation]);
+
   const handleLogin = async () => {
     try {
       const res = await axios.post(`${BASE_URL}/api/auth/login`, { email, password });
@@ -215,6 +388,13 @@ export default function ProfileScreen() {
       await SecureStore.setItemAsync('token', token); // Store token securely
       await SecureStore.setItemAsync('userId', user._id); // Store userId securely
       await SecureStore.setItemAsync('userRole', user.role); // Store userRole securely
+
+      // Check for pending notifications
+      await checkPendingDiscounts();
+      await checkPendingProductNotifications();
+      await checkPendingOrderNotifications();
+      await checkDiscountNotifications(); // Add this line
+      await checkNewDiscounts(); // Check for new discounts after login
 
       setUserRole(user.role);
       setProfileImage(user.profileImage);
@@ -553,7 +733,6 @@ export default function ProfileScreen() {
         text1: 'Success',
         text2: 'Review submitted successfully! 🌟',
         visibilityTime: 3000,
-        position: 'top',
       });
       setReviewModalVisible(false);
       setSelectedProduct(null); // Reset selected product
@@ -565,7 +744,6 @@ export default function ProfileScreen() {
         text1: 'Error',
         text2: 'Failed to submit review. Please try again.',
         visibilityTime: 3000,
-        position: 'top',
       });
       console.error("Error submitting review:", error.response ? error.response.data : error.message);
     }
@@ -611,7 +789,6 @@ export default function ProfileScreen() {
         text1: 'Success',
         text2: 'Profile updated successfully! 👋',
         visibilityTime: 3000,
-        position: 'top',
       });
     } catch (error) {
       Toast.show({
@@ -873,9 +1050,8 @@ export default function ProfileScreen() {
               
               <TouchableOpacity 
                 style={[styles.socialButton, styles.facebookButton]} 
-                onPress={handleFacebookLogin}
-              >
-                <Text style={styles.socialButtonText}>Continue with Facebook</Text>
+                onPress={handleFacebookLogin}>
+              <Text style={styles.socialButtonText}>Continue with Facebook</Text>
               </TouchableOpacity>
 
               <View style={styles.dividerContainer}>
