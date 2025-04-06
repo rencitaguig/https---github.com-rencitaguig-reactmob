@@ -30,7 +30,7 @@ import { Camera } from 'expo-camera';
 import * as SecureStore from "expo-secure-store"; 
 import { storeOrderStatusNotification } from '../notifications/OrderStatusNotification';
 import CustomToast from '../components/CustomToast';
-import * as Notifications from 'expo-notifications'; // Add this import
+import * as Notifications from 'expo-notifications';
 
 const windowHeight = Dimensions.get('window').height;
 
@@ -46,7 +46,7 @@ const storeOrderNotification = async (order, newStatus) => {
       data: {
         orderId: order._id,
         userId: order.userId._id,
-        screen: 'NotificationsDetails'
+        screen: 'OrderDetails'  // Updated screen name
       }
     };
 
@@ -59,70 +59,27 @@ const storeOrderNotification = async (order, newStatus) => {
   }
 };
 
-// Add this helper function near the top of the file
-const setupNotifications = async () => {
-  const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') {
-    return;
-  }
-
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
-};
-
-const storeProductNotification = async (product, banner) => {
+// Update the storeProductNotification function
+const storeProductNotification = async (product) => {
   try {
-    await setupNotifications(); // Setup notifications first
-
-    let title = 'New Product Alert!';
-    let body = `Check out our new product: ${product.name}`;
-
-    if (banner === 'sale') {
-      title = 'Special Sale!';
-      body = `Don't miss out! ${product.name} is on sale!`;
-    } else if (banner === 'hot') {
-      title = 'Hot Product!';
-      body = `${product.name} is trending! Get it while it's hot!`;
-    } else if (banner === 'top') {
-      title = 'Top Rated Product!';
-      body = `Discover our top-rated ${product.name}!`;
-    }
-
-    const notificationData = {
-      productId: product._id,
-      banner: banner || 'new',
-      screen: 'Product',
-      showProductModal: true
+    const notification = {
+      title: 'New Product Alert! 🆕',
+      body: `Check out our new product: ${product.name}`,
+      data: {
+        screen: 'Product',
+        productId: product._id,
+        showProductModal: true
+      }
     };
 
-    // Store notification for later use
-    const existingNotifications = await SecureStore.getItemAsync('pendingProductNotifications');
-    const notifications = existingNotifications ? JSON.parse(existingNotifications) : [];
-    notifications.push({
-      title,
-      body,
-      data: notificationData
-    });
+    // Store notification for later instead of showing immediately
+    const storedNotifs = await SecureStore.getItemAsync('pendingProductNotifications') || '[]';
+    const notifications = JSON.parse(storedNotifs);
+    notifications.push(notification);
     await SecureStore.setItemAsync('pendingProductNotifications', JSON.stringify(notifications));
-
-    // Show notification immediately
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data: notificationData,
-      },
-      trigger: null // null trigger means show immediately
-    });
 
   } catch (error) {
     console.error('Error storing product notification:', error);
-    throw error; // Re-throw to handle in the calling function
   }
 };
 
@@ -292,20 +249,21 @@ export default function AdminScreen() {
     setToastVisible(true);
   };
 
+  // Update handleProductAction to include notification scheduling
   const handleProductAction = async () => {
     try {
-      const token = await SecureStore.getItemAsync("token"); // Use Secure Store to get token
+      const token = await SecureStore.getItemAsync("token");
       if (!token) {
         setCreateProductMessage("No token found. Please log in again.");
         return;
       }
-
+  
       // Validate inputs
       if (!productName || !productPrice || !productCategory) {
         setCreateProductMessage("Name, price, and category are required.");
         return;
       }
-
+  
       const productData = {
         name: productName,
         description: productDescription,
@@ -313,19 +271,11 @@ export default function AdminScreen() {
         category: productCategory,
         banner: productBanner,
       };
-
-      // Check image size before adding to request
+  
       if (productImage?.base64) {
-        const base64Length = productImage.base64.length;
-        const fileSizeInMB = (base64Length * (3/4)) / (1024*1024);
-        
-        if (fileSizeInMB > 1) {
-          setCreateProductMessage("Image size too large. Please choose a smaller image.");
-          return;
-        }
         productData.image = `data:image/jpeg;base64,${productImage.base64}`;
       }
-
+  
       let response;
       if (isEditing) {
         response = await updateProduct(selectedProduct._id, productData, token);
@@ -333,9 +283,11 @@ export default function AdminScreen() {
       } else {
         response = await createProduct(productData, token);
         showToast('Product created successfully!');
-        await storeProductNotification(response, productData.banner);
+        
+        // Store notification for new product
+        await storeProductNotification(response);
       }
-
+  
       // Clear form and refresh
       setProductName("");
       setProductDescription("");
@@ -348,7 +300,7 @@ export default function AdminScreen() {
       setTimeout(() => setCreateProductMessage(""), 3000);
       await fetchProducts();
       dispatch(fetchHomeProducts());
-
+  
     } catch (error) {
       const errorMessage = error.response?.status === 413 
         ? "Image size too large. Please choose a smaller image."

@@ -365,15 +365,13 @@ export default function ProfileScreen() {
 
       const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
         const data = response.notification.request.content.data;
+        console.log('Handling notification response:', data); // Add debug log
         
-        if (data?.screen === 'DiscountDetailsScreen' && data?.discountId) {
-          // Get parent navigation
-          const rootNavigation = navigation.getParent();
-          if (rootNavigation) {
-            rootNavigation.navigate('DiscountDetailsScreen', { 
-              discountId: data.discountId 
-            });
-          }
+        if (data?.screen === 'OrderDetailsScreen' && data?.orderId) {
+          console.log('Navigating to order details:', data.orderId); // Add debug log
+          navigation.navigate('OrderDetailsScreen', { 
+            orderId: data.orderId 
+          });
         }
       });
 

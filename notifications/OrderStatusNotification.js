@@ -17,7 +17,7 @@ export const storeOrderStatusNotification = async (order, newStatus) => {
         items: order.items,
         totalPrice: order.totalPrice,
         createdAt: order.createdAt,
-        screen: 'NotificationsDetails',
+        screen: 'OrderDetailsScreen',  // Make sure this matches exactly
         type: 'orderStatus',
       }
     };

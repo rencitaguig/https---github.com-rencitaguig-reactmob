@@ -57,12 +57,13 @@ export default function App() {
           return;
         }
 
-        // Check both possible screen names
-        const isDiscountScreen = data?.screen === 'DiscountDetailsScreen' || 
-                               data?.screen === 'DiscountDetails';
-
-        if (isDiscountScreen && data?.discountId) {
-          console.log('Navigating to discount details:', data.discountId);
+        if (data?.screen === 'Product' && data?.productId && data?.showProductModal) {
+          // Navigate to HomeScreen with product data
+          navigationRef.current.navigate('Home', {
+            productId: data.productId,
+            showProductModal: true
+          });
+        } else if (data?.screen === 'DiscountDetailsScreen' && data?.discountId) {
           navigationRef.current.navigate('DiscountDetailsScreen', {
             discountId: data.discountId
           });
@@ -142,10 +143,10 @@ export default function App() {
                   />
           
                   <Stack.Screen 
-                    name="NotificationsDetails" 
-                    component={NotificationsDetails}
+                    name="OrderDetailsScreen" // Remove the extra space that was here
+                    component={OrderDetailsScreen}
                     options={{
-                      title: 'Notification Details',
+                      title: 'Order Details',
                       headerStyle: {
                         backgroundColor: '#8B4513',
                       },

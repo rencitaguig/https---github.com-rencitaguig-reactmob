@@ -94,23 +94,131 @@ export default function HomeScreen({ navigation, route }) {
     setupNotifications();
   }, []);
 
+  // Update this useEffect to better handle notifications
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      console.log('Notification response data:', data); // Debug log
+
+      if (data?.screen === 'Product' && data?.productId && data?.showProductModal) {
+        const product = products.find(p => p._id === data.productId);
+        if (product) {
+          console.log('Found product, showing modal:', product); // Debug log
+          handleProductSelect(product);
+        } else {
+          console.log('Product not found:', data.productId); // Debug log
+        }
+      }
+    });
+
+    // Set up notification handler
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [products]);
+
+  // Add this useEffect to handle deep linking from notifications
+  useEffect(() => {
+    if (route.params?.productId && route.params?.showProductModal) {
+      // Wait for products to be loaded
+      if (products.length > 0) {
+        const product = products.find(p => p._id === route.params.productId);
+        if (product) {
+          handleProductSelect(product);
+        }
+      }
+    }
+  }, [route.params?.productId, route.params?.showProductModal, products]);
+
+  // Replace/update the notification useEffect
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      console.log('Notification response received:', data); // Debug log
+
+      if (data?.screen === 'Product' && data?.productId) {
+        const product = products.find(p => p._id === data.productId);
+        if (product) {
+          console.log('Showing product modal for:', product.name);
+          handleProductSelect(product);
+        } else {
+          console.log('Product not found:', data.productId);
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [products]);
+
+  // Add this function after other useEffects
+  const checkPendingProductNotifications = async () => {
+    try {
+      const pendingNotifs = await SecureStore.getItemAsync('pendingProductNotifications');
+      if (!pendingNotifs) return;
+
+      const notifications = JSON.parse(pendingNotifs);
+      if (notifications.length === 0) return;
+
+      // Show notifications
+      for (const notification of notifications) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: notification.title,
+            body: notification.body,
+            data: notification.data
+          },
+          trigger: null // Show immediately
+        });
+      }
+
+      // Clear the notifications after showing them
+      await SecureStore.setItemAsync('pendingProductNotifications', JSON.stringify([]));
+    } catch (error) {
+      console.error('Error checking product notifications:', error);
+    }
+  };
+
+  // Add this useEffect to check notifications when component mounts
+  useEffect(() => {
+    const checkNotifications = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        return;
+      }
+
+      await checkPendingProductNotifications();
+    };
+
+    checkNotifications();
+  }, []);
+
   const handleAddToCart = async (item) => {
     await addToCart(item);
   };
 
+  // Update handleProductSelect to be more robust
   const handleProductSelect = async (product) => {
-    if (!product._id) {
-      console.warn('Product missing ID:', product);
+    if (!product?._id) {
+      console.warn('Invalid product or missing ID:', product);
       return;
     }
+
     setSelectedProduct(product);
     try {
       const token = await SecureStore.getItemAsync('token');
-      // Update the endpoint to match the new backend route
       const response = await axios.get(`${BASE_URL}/api/reviews/product/${product._id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setReviews(response.data);
+      setModalVisible(true); // Make sure modal is shown
     } catch (error) {
       console.error("Error fetching reviews:", error);
       Toast.show({
@@ -118,8 +226,9 @@ export default function HomeScreen({ navigation, route }) {
         text1: 'Error',
         text2: 'Failed to load reviews'
       });
+      // Still show the modal even if reviews fail to load
+      setModalVisible(true);
     }
-    setModalVisible(true);
   };
 
   const handleUpdateReview = async () => {
