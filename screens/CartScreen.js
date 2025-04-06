@@ -16,12 +16,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSelector } from 'react-redux';
 import * as SecureStore from "expo-secure-store"; // Import Secure Store
 
+const SHIPPING_FEE = 75; // Add constant for shipping fee
+
 export default function CartScreen() {
   const { cart, removeFromCart, checkout } = useContext(CartContext);
   const [modalVisible, setModalVisible] = useState(false);
   const [discountCode, setDiscountCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('Cash on Delivery');
   const { discounts } = useSelector((state) => state.discounts);
 
   const handleCheckout = async () => {
@@ -29,27 +32,49 @@ export default function CartScreen() {
     setIsSubmittingOrder(true);
 
     try {
-        const userId = await SecureStore.getItemAsync('userId');
-        const token = await SecureStore.getItemAsync('token');
-        
-        if (!userId || !token) {
-            Alert.alert("Error", "Please log in to continue.");
-            return;
-        }
+      const userId = await SecureStore.getItemAsync('userId');
+      const token = await SecureStore.getItemAsync('token');
+      
+      if (!userId || !token) {
+        Alert.alert("Error", "Please log in to continue.");
+        return;
+      }
 
-        const finalPrice = calculateFinalPrice();
-        await checkout(finalPrice); // Pass the discounted price to checkout
-        setModalVisible(false);
-        setAppliedDiscount(null);
-        Alert.alert("Success", "Order placed successfully!");
+      const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+      let finalPrice = subtotal + SHIPPING_FEE;
+
+      if (appliedDiscount) {
+        const discountAmount = (subtotal * appliedDiscount.percentage) / 100;
+        finalPrice = finalPrice - discountAmount;
+      }
+
+      // Create order data with correct number types
+      const orderData = {
+        userId: userId,
+        items: cart.map(item => ({
+          productId: item._id,
+          name: item.name,
+          quantity: Number(item.quantity || 1),
+          price: Number(item.price)
+        })),
+        totalPrice: Number(finalPrice),
+        originalPrice: Number(subtotal),
+        paymentMethod: paymentMethod,
+        shippingFee: Number(SHIPPING_FEE)
+      };
+
+      await checkout(orderData);
+      setModalVisible(false);
+      setAppliedDiscount(null);
+      Alert.alert("Success", "Order placed successfully!");
     } catch (error) {
-        console.error("Checkout error:", error);
-        Alert.alert(
-            "Error",
-            error.response?.data?.message || "Network error. Please check your connection."
-        );
+      console.error("Checkout error:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to create order. Please try again."
+      );
     } finally {
-        setIsSubmittingOrder(false);
+      setIsSubmittingOrder(false);
     }
   };
 
@@ -70,11 +95,12 @@ export default function CartScreen() {
 
   const calculateFinalPrice = () => {
     const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+    const withShipping = subtotal + SHIPPING_FEE;
     if (appliedDiscount) {
       const discountAmount = (subtotal * appliedDiscount.percentage) / 100;
-      return subtotal - discountAmount;
+      return withShipping - discountAmount;
     }
-    return subtotal;
+    return withShipping;
   };
 
   return (
@@ -165,6 +191,10 @@ export default function CartScreen() {
                     ₱{cart.reduce((sum, item) => sum + item.price, 0).toFixed(2)}
                   </Text>
                 </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Shipping Fee:</Text>
+                  <Text style={styles.summaryValue}>₱{SHIPPING_FEE.toFixed(2)}</Text>
+                </View>
                 {appliedDiscount && (
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Discount ({appliedDiscount.percentage}%):</Text>
@@ -177,6 +207,30 @@ export default function CartScreen() {
                   <Text style={styles.totalLabel}>Total:</Text>
                   <Text style={styles.totalValue}>₱{calculateFinalPrice().toFixed(2)}</Text>
                 </View>
+
+                <View style={styles.paymentSection}>
+                  <Text style={styles.paymentLabel}>Select Payment Method:</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.paymentOption,
+                      paymentMethod === 'Cash on Delivery' && styles.paymentOptionSelected
+                    ]}
+                    onPress={() => setPaymentMethod('Cash on Delivery')}
+                  >
+                    <Text style={styles.paymentOptionText}>Cash on Delivery</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[
+                      styles.paymentOption,
+                      paymentMethod === 'Online Payment' && styles.paymentOptionSelected
+                    ]}
+                    onPress={() => setPaymentMethod('Online Payment')}
+                  >
+                    <Text style={styles.paymentOptionText}>Online Payment</Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity
                   style={styles.confirmButton}
                   onPress={handleCheckout}
@@ -409,5 +463,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  paymentSection: {
+    marginVertical: 15,
+    width: '100%',
+  },
+  paymentLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3E2723',
+    marginBottom: 10,
+  },
+  paymentOption: {
+    backgroundColor: '#F5F5F5',
+    padding: 15,
+    borderRadius: 8,
+    marginVertical: 5,
+    borderWidth: 1,
+    borderColor: '#D7CCC8',
+  },
+  paymentOptionSelected: {
+    backgroundColor: '#8B4513',
+    borderColor: '#8B4513',
+  },
+  paymentOptionText: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#3E2723',
   },
 });

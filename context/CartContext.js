@@ -36,59 +36,37 @@ export const CartProvider = ({ children }) => {
     return [];
   };
 
-  const checkout = async (discountedPrice = null) => {
-    if (cart.length === 0) return;
-
+  const checkout = async (orderData) => {
     try {
-      let userId = await SecureStore.getItemAsync('userId'); // Use Secure Store to get userId
-      if (!userId) {
-        console.error("No user ID found");
-        return; // Exit if userId is not found
-      }
-
-      // Ensure userId is formatted as an ObjectId
-      if (!/^[a-f\d]{24}$/i.test(userId)) {
-        console.error(`Invalid userId format: ${userId}`);
-        return; // Exit if userId is not valid
-      }
-
-      console.log(`Using userId: ${userId}`); // Log the valid userId
-
-      const token = await getSecureItem('token'); // Use secure storage to get token
-      if (!token) {
-        console.error("No token found");
-        return;
-      }
-
-      const orderData = {
-        userId,
-        items: cart.map((item) => ({
-          productId: item._id,
-          name: item.name,
-          quantity: 1, // Assuming quantity is 1
-          price: item.price,
+      const token = await SecureStore.getItemAsync('token');
+      
+      // Ensure numbers are properly formatted
+      const formattedOrderData = {
+        ...orderData,
+        items: orderData.items.map(item => ({
+          ...item,
+          quantity: Number(item.quantity),
+          price: Number(item.price)
         })),
-        totalPrice: discountedPrice || cart.reduce((sum, item) => sum + item.price, 0),
-        originalPrice: cart.reduce((sum, item) => sum + item.price, 0),
+        totalPrice: Number(orderData.totalPrice),
+        originalPrice: Number(orderData.originalPrice),
+        shippingFee: Number(orderData.shippingFee || 75)
       };
 
-      const response = await axios.post(`${BASE_URL}/api/orders`, orderData, {
-        headers: { Authorization: `Bearer ${token}` } // Include token in headers
-      });
-      console.log("Order placed:", response.data);
+      const response = await axios.post(
+        `${BASE_URL}/api/orders`,
+        formattedOrderData,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      // Clear cart after successful order
       setCart([]);
-      await AsyncStorage.removeItem("cart");
-
-      if (onOrderPlaced) {
-        onOrderPlaced(); // Notify ProfileScreen about the new order
-      }
-
-      // Import and use OrderContext to refresh orders
-      const { fetchOrders } = require('./OrderContext');
-      fetchOrders();
-      
+      return response.data;
     } catch (error) {
-      console.error("Error placing order:", error.response ? error.response.data : error.message);
+      console.error('Checkout error:', error);
+      throw error;
     }
   };
 
