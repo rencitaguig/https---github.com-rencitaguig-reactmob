@@ -12,6 +12,7 @@ import Toast from 'react-native-toast-message';
 import * as SecureStore from "expo-secure-store"; // Import SecureStore
 import axios from "axios";
 import BASE_URL from "../config"; // Import BASE_URL
+import * as Notifications from 'expo-notifications'; // Add this import
 
 export default function HomeScreen({ navigation, route }) {
   const dispatch = useDispatch();
@@ -34,6 +35,8 @@ export default function HomeScreen({ navigation, route }) {
   const [editRating, setEditRating] = useState("");
   const [reviews, setReviews] = useState([]);
   const [editComment, setEditComment] = useState('');
+  const [selectedBanner, setSelectedBanner] = useState('All');
+  const promotionalBanners = ['All', 'Sale', 'Hot', 'Top', 'New', 'Featured', 'Limited'];
 
   // Replace the notifications useEffect with this simpler navigation handler
   useEffect(() => {
@@ -44,6 +47,52 @@ export default function HomeScreen({ navigation, route }) {
       }
     }
   }, [route.params?.productId, route.params?.showProductModal, products]);
+
+  // After other useEffect hooks, add this new one for handling notifications 
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      if (data?.screen === 'Product' && data?.productId) {
+        const product = products.find(p => p._id === data.productId);
+        if (product) {
+          handleProductSelect(product);
+        }
+      }
+    });
+
+    // Set up notification handler
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [products]);
+
+  // Add this useEffect for notification setup
+  useEffect(() => {
+    const setupNotifications = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        return;
+      }
+
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        }),
+      });
+    };
+
+    setupNotifications();
+  }, []);
 
   const handleAddToCart = async (item) => {
     await addToCart(item);
@@ -164,7 +213,9 @@ export default function HomeScreen({ navigation, route }) {
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
     const matchesPrice = (!minPrice || product.price >= Number(minPrice)) && 
       (!maxPrice || product.price <= Number(maxPrice));
-    return matchesSearch && matchesCategory && matchesPrice;
+    const matchesBanner = selectedBanner === 'All' || 
+      (product.banner && product.banner.toLowerCase() === selectedBanner.toLowerCase());
+    return matchesSearch && matchesCategory && matchesPrice && matchesBanner;
   });
 
   useFocusEffect(
@@ -182,29 +233,33 @@ export default function HomeScreen({ navigation, route }) {
   const toggleDrawer = () => {
     const toValue = drawerVisible ? -300 : 0;
     
-    // Cancel any running animations
-    drawerAnim.stopAnimation();
-    
-    Animated.timing(drawerAnim, {
-      toValue,
-      duration: 300,
-      useNativeDriver: true,
-      isInteraction: true,
-    }).start(() => {
-      setDrawerVisible(!drawerVisible);
+    // Use requestAnimationFrame to ensure animation queue is ready
+    requestAnimationFrame(() => {
+      Animated.timing(drawerAnim, {
+        toValue,
+        duration: 300,
+        useNativeDriver: true,
+        isInteraction: true,
+      }).start(() => setDrawerVisible(!drawerVisible));
     });
   };
 
   const getBannerColor = (banner) => {
-    switch (banner) {
-      case 'new':
-        return '#4CAF50';
+    switch (banner?.toLowerCase()) {
       case 'sale':
-        return '#F44336';
+        return { color: '#FF3D00', icon: 'flash' };  // Bright orange-red
+      case 'hot':
+        return { color: '#D50000', icon: 'flame' };  // Deep red
       case 'top':
-        return '#2196F3';
+        return { color: '#304FFE', icon: 'star' };  // Bright blue
+      case 'new':
+        return { color: '#00C853', icon: 'ribbon' };  // Bright green
+      case 'featured':
+        return { color: '#AA00FF', icon: 'bookmark' };  // Bright purple
+      case 'limited':
+        return { color: '#FFD600', icon: 'time' };  // Bright yellow
       default:
-        return '#E0E0E0';
+        return null;  // Return null for 'none' or undefined banners
     }
   };
 
@@ -298,12 +353,46 @@ export default function HomeScreen({ navigation, route }) {
             />
           </View>
           
+          <Text style={styles.drawerSectionTitle}>Promotional Banners</Text>
+          <View style={styles.bannerFilterContainer}>
+            {promotionalBanners.map((banner) => (
+              <TouchableOpacity
+                key={banner}
+                style={[
+                  styles.drawerBannerButton,
+                  selectedBanner === banner && styles.drawerBannerButtonActive,
+                  selectedBanner === banner && { backgroundColor: banner !== 'All' ? getBannerColor(banner)?.color : '#8B4513' }
+                ]}
+                onPress={() => {
+                  setSelectedBanner(banner);
+                  toggleDrawer();
+                }}
+              >
+                {banner !== 'All' && getBannerColor(banner) && (
+                  <Ionicons 
+                    name={getBannerColor(banner).icon} 
+                    size={16} 
+                    color={selectedBanner === banner ? '#FFF' : '#5D4037'} 
+                    style={styles.drawerBannerIcon}
+                  />
+                )}
+                <Text style={[
+                  styles.drawerBannerText,
+                  selectedBanner === banner && styles.drawerBannerTextActive
+                ]}>
+                  {banner}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           <TouchableOpacity 
             style={styles.drawerClearButton}
             onPress={() => {
               setMinPrice('');
               setMaxPrice('');
               setSelectedCategory('All');
+              setSelectedBanner('All');
               toggleDrawer();
             }}
           >
@@ -341,8 +430,14 @@ export default function HomeScreen({ navigation, route }) {
           >
             <View style={styles.imageContainer}>
               <Image source={{ uri: item.image }} style={styles.image} />
-              {item.banner && item.banner !== 'none' && (
-                <View style={[styles.bannerTag, { backgroundColor: getBannerColor(item.banner) }]}>
+              {item.banner && item.banner !== 'none' && getBannerColor(item.banner) && (
+                <View style={[styles.bannerTag, { backgroundColor: getBannerColor(item.banner).color }]}>
+                  <Ionicons 
+                    name={getBannerColor(item.banner).icon}
+                    size={14} 
+                    color="#FFF" 
+                    style={styles.bannerIcon}
+                  />
                   <Text style={styles.bannerTagText}>{item.banner.toUpperCase()}</Text>
                 </View>
               )}
@@ -704,14 +799,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    flexDirection: 'row', // Add this line
+    alignItems: 'center', // Add this line
   },
   bannerTagText: {
     color: '#FFF',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+    marginLeft: 5, // Add this line
   },
   title: { 
     fontSize: 16, 
@@ -865,5 +969,36 @@ const styles = StyleSheet.create({
     color: '#5D4037',
     textAlign: 'center',
     marginVertical: 10,
-  }
+  },
+  bannerFilterContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 15,
+  },
+  drawerBannerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#D7CCC8',
+  },
+  drawerBannerButtonActive: {
+    borderColor: 'transparent',
+  },
+  drawerBannerIcon: {
+    marginRight: 6,
+  },
+  drawerBannerText: {
+    fontSize: 14,
+    color: '#5D4037',
+    fontWeight: '500',
+  },
+  drawerBannerTextActive: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
 });

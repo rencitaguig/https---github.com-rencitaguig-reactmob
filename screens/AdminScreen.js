@@ -11,7 +11,9 @@ import {
   Dimensions, 
   Platform,
   RefreshControl,
-  Image
+  Image,
+  ToastAndroid,
+  Alert
 } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
@@ -25,8 +27,10 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useDispatch } from 'react-redux';
 import { fetchProducts as fetchHomeProducts } from '../store/productSlice';
 import { Camera } from 'expo-camera';
-import * as SecureStore from "expo-secure-store"; // Import Secure Store
+import * as SecureStore from "expo-secure-store"; 
 import { storeOrderStatusNotification } from '../notifications/OrderStatusNotification';
+import CustomToast from '../components/CustomToast';
+import * as Notifications from 'expo-notifications'; // Add this import
 
 const windowHeight = Dimensions.get('window').height;
 
@@ -56,12 +60,28 @@ const storeOrderNotification = async (order, newStatus) => {
 };
 
 // Add this helper function near the top of the file
+const setupNotifications = async () => {
+  const { status } = await Notifications.requestPermissionsAsync();
+  if (status !== 'granted') {
+    return;
+  }
+
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+};
+
 const storeProductNotification = async (product, banner) => {
   try {
+    await setupNotifications(); // Setup notifications first
+
     let title = 'New Product Alert!';
     let body = `Check out our new product: ${product.name}`;
 
-    // Customize notification based on banner type
     if (banner === 'sale') {
       title = 'Special Sale!';
       body = `Don't miss out! ${product.name} is on sale!`;
@@ -73,22 +93,36 @@ const storeProductNotification = async (product, banner) => {
       body = `Discover our top-rated ${product.name}!`;
     }
 
-    const notification = {
-      title,
-      body,
-      data: {
-        productId: product._id,
-        banner: banner || 'new',
-        screen: 'Product',
-      }
+    const notificationData = {
+      productId: product._id,
+      banner: banner || 'new',
+      screen: 'Product',
+      showProductModal: true
     };
 
+    // Store notification for later use
     const existingNotifications = await SecureStore.getItemAsync('pendingProductNotifications');
     const notifications = existingNotifications ? JSON.parse(existingNotifications) : [];
-    notifications.push(notification);
+    notifications.push({
+      title,
+      body,
+      data: notificationData
+    });
     await SecureStore.setItemAsync('pendingProductNotifications', JSON.stringify(notifications));
+
+    // Show notification immediately
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: notificationData,
+      },
+      trigger: null // null trigger means show immediately
+    });
+
   } catch (error) {
     console.error('Error storing product notification:', error);
+    throw error; // Re-throw to handle in the calling function
   }
 };
 
@@ -112,6 +146,9 @@ export default function AdminScreen() {
   const [createProductMessage, setCreateProductMessage] = useState("");
   const [cameraPermission, setCameraPermission] = useState(null);
   const [productBanner, setProductBanner] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success');
 
   useEffect(() => {
     fetchProducts();
@@ -141,7 +178,7 @@ export default function AdminScreen() {
 
   const handleUpdateOrderStatus = async () => {
     if (!selectedOrder) {
-      setMessage("Please select an order.");
+      showToast("Please select an order.", "error");
       return;
     }
     try {
@@ -157,14 +194,13 @@ export default function AdminScreen() {
         createdAt: orderToUpdate.createdAt
       }, status);
       
-      setUpdateMessage("Order status updated successfully!");
+      showToast("Order status updated successfully!", "success");
       setSelectedOrder(null);
-      setTimeout(() => setUpdateMessage(""), 3000);
       
       // Refresh orders list
       await fetchOrders();
     } catch (error) {
-      setUpdateMessage("Failed to update order status.");
+      showToast("Failed to update order status.", "error");
       console.error("Error updating order:", error);
     }
   };
@@ -250,6 +286,12 @@ export default function AdminScreen() {
     }
   };
 
+  const showToast = (message, type = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  };
+
   const handleProductAction = async () => {
     try {
       const token = await SecureStore.getItemAsync("token"); // Use Secure Store to get token
@@ -287,11 +329,10 @@ export default function AdminScreen() {
       let response;
       if (isEditing) {
         response = await updateProduct(selectedProduct._id, productData, token);
-        setCreateProductMessage("Product updated successfully!");
+        showToast('Product updated successfully!');
       } else {
         response = await createProduct(productData, token);
-        setCreateProductMessage("Product created successfully!");
-        // Store notification for new product
+        showToast('Product created successfully!');
         await storeProductNotification(response, productData.banner);
       }
 
@@ -312,6 +353,7 @@ export default function AdminScreen() {
       const errorMessage = error.response?.status === 413 
         ? "Image size too large. Please choose a smaller image."
         : isEditing ? "Failed to update product." : "Failed to create product.";
+      showToast(errorMessage, 'error');
       setCreateProductMessage(errorMessage);
       console.error("Error with product:", error);
     }
@@ -326,11 +368,13 @@ export default function AdminScreen() {
       }
 
       await deleteProduct(productId, token);
-      setCreateProductMessage("Product deleted successfully!");
+      showToast('Product deleted successfully!');
       setTimeout(() => setCreateProductMessage(""), 3000);
       dispatch(fetchHomeProducts()); // Refresh products in HomeScreen
     } catch (error) {
-      setCreateProductMessage("Failed to delete product.");
+      const errorMessage = "Failed to delete product.";
+      showToast(errorMessage, 'error');
+      setCreateProductMessage(errorMessage);
       console.error("Error deleting product:", error);
     }
   };
@@ -660,7 +704,17 @@ export default function AdminScreen() {
     );
   };
 
-  return <View style={{ flex: 1 }}>{renderContent()}</View>;
+  return (
+    <View style={{ flex: 1 }}>
+      <CustomToast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onHide={() => setToastVisible(false)}
+      />
+      {renderContent()}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

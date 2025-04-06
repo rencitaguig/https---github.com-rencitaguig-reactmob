@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Provider } from "react-redux";
 import { store } from "./store/store";
 import { CartProvider } from "./context/CartContext";
@@ -14,15 +14,23 @@ import NotificationsDetails from './screens/NotificationsDetails'; // Add this i
 import DiscountDetailsScreen from './screens/DiscountDetailsScreen'; // Fix import name
 import { createStackNavigator } from '@react-navigation/stack'; // Add this import
 import * as Notifications from 'expo-notifications'; // Add this import
+import { LogBox } from 'react-native'; // Add this import
+import { UIManager, Platform } from 'react-native'; // Add this import
 
 const Stack = createStackNavigator(); // Add this line
+
+// Ignore specific warnings
+LogBox.ignoreLogs([
+  'Warning: Error: Should have a queue',
+  'Non-serializable values were found in the navigation state',
+]);
 
 export default function App() {
   const [userRole, setUserRole] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Add ref for navigation
-  const navigationRef = React.useRef();
+  const navigationRef = useRef();
 
   useEffect(() => {
     const setupNotifications = async () => {
@@ -42,29 +50,21 @@ export default function App() {
 
       const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
         const data = response.notification.request.content.data;
-        console.log('Notification clicked:', data); // Debug log
+        console.log('Notification clicked with data:', data);
         
-        if (!navigationRef.current) return;
+        if (!navigationRef.current) {
+          console.log('Navigation ref not ready');
+          return;
+        }
 
-        if (data?.screen === 'DiscountDetailsScreen' && data?.discountId) {
-          // Ensure we navigate after a short delay
-          setTimeout(() => {
-            navigationRef.current.navigate('DiscountDetailsScreen', {
-              discountId: data.discountId
-            });
-          }, 100);
-        } else if (data?.screen === 'NotificationsDetails' && data?.orderId) {
-          navigationRef.current.navigate('NotificationsDetails', { 
-            orderId: data.orderId,
-            notificationType: 'order' 
-          });
-        } else if (data?.screen === 'Product' && data?.productId) {
-          navigationRef.current.navigate('Main', {
-            screen: 'Home',
-            params: { 
-              productId: data.productId,
-              showProductModal: true 
-            }
+        // Check both possible screen names
+        const isDiscountScreen = data?.screen === 'DiscountDetailsScreen' || 
+                               data?.screen === 'DiscountDetails';
+
+        if (isDiscountScreen && data?.discountId) {
+          console.log('Navigating to discount details:', data.discountId);
+          navigationRef.current.navigate('DiscountDetailsScreen', {
+            discountId: data.discountId
           });
         }
       });
@@ -110,6 +110,15 @@ export default function App() {
     initializeApp();
   }, []);
 
+  // Enable native gesture handling
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+      }
+    }
+  }, []);
+
   if (isLoading) {
     return null; // Show a loading screen or spinner if needed
   }
@@ -120,7 +129,11 @@ export default function App() {
         <OrderProvider>
           <ProductProvider>
             <CartProvider>
-              <NavigationContainer ref={navigationRef}>
+              <NavigationContainer
+                ref={navigationRef}
+                onStateChange={() => {}}  // Add empty callback to help manage navigation state
+                onUnhandledAction={() => {}}  // Add empty callback for unhandled actions
+              >
                 <Stack.Navigator>
                   <Stack.Screen 
                     name="Main" 

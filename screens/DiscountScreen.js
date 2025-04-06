@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import BASE_URL from '../config'; // Add this import
 import * as Notifications from 'expo-notifications';
+import CustomToast from '../components/CustomToast';
 
 export default function DiscountScreen() {
   const dispatch = useDispatch();
@@ -31,7 +32,9 @@ export default function DiscountScreen() {
   const [percentage, setPercentage] = useState('');
   const [expiryDate, setExpiryDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [message, setMessage] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success');
 
   useEffect(() => {
     loadDiscounts();
@@ -41,14 +44,14 @@ export default function DiscountScreen() {
     try {
       const token = await SecureStore.getItemAsync('token');
       if (!token) {
-        setMessage('Please login first');
+        showToast('Please login first', 'error');
         return;
       }
 
       await dispatch(fetchDiscounts(token)).unwrap();
     } catch (error) {
       console.error('Failed to load discounts:', error);
-      setMessage('Failed to load discounts. Please try again.');
+      showToast('Failed to load discounts. Please try again.', 'error');
     }
   };
 
@@ -58,28 +61,34 @@ export default function DiscountScreen() {
     setRefreshing(false);
   };
 
+  const showToast = (msg, type = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setToastVisible(true);
+  };
+
   const handleSubmit = async () => {
     try {
       const token = await SecureStore.getItemAsync('token');
       if (!token) {
-        setMessage('Please login first');
+        showToast('Please login first', 'error');
         return;
       }
 
       // Input validation
       if (!code.trim()) {
-        setMessage('Discount code is required');
+        showToast('Discount code is required', 'error');
         return;
       }
 
       const percentageNum = Number(percentage);
       if (isNaN(percentageNum) || percentageNum <= 0 || percentageNum > 100) {
-        setMessage('Percentage must be between 1 and 100');
+        showToast('Percentage must be between 1 and 100', 'error');
         return;
       }
 
       if (!expiryDate || expiryDate < new Date()) {
-        setMessage('Please set a valid future expiry date');
+        showToast('Please set a valid future expiry date', 'error');
         return;
       }
 
@@ -96,7 +105,7 @@ export default function DiscountScreen() {
           data: discountData,
           token 
         })).unwrap();
-        setMessage('Discount updated successfully');
+        showToast('Discount updated successfully');
       } else {
         const result = await dispatch(createDiscount({ 
           data: discountData,
@@ -128,7 +137,7 @@ export default function DiscountScreen() {
           console.error('Failed to store notification:', error);
         }
         
-        setMessage('Discount created successfully');
+        showToast('Discount created successfully');
       }
 
       // Reset form
@@ -136,7 +145,7 @@ export default function DiscountScreen() {
       await loadDiscounts();
     } catch (error) {
       console.error('Discount operation failed:', error);
-      setMessage(error.response?.data?.message || 'Server error occurred. Please try again.');
+      showToast(error.response?.data?.message || 'Server error occurred. Please try again.', 'error');
     }
   };
 
@@ -152,16 +161,16 @@ export default function DiscountScreen() {
     try {
       const token = await SecureStore.getItemAsync('token');
       if (!token) {
-        setMessage('Please login first');
+        showToast('Please login first', 'error');
         return;
       }
 
       await dispatch(deleteDiscount({ id, token })).unwrap();
-      setMessage('Discount deleted successfully');
+      showToast('Discount deleted successfully');
       await loadDiscounts();
     } catch (error) {
       console.error('Delete operation failed:', error);
-      setMessage(error.response?.data?.message || 'Failed to delete discount');
+      showToast(error.response?.data?.message || 'Failed to delete discount', 'error');
     }
   };
 
@@ -236,6 +245,12 @@ export default function DiscountScreen() {
       colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
       style={styles.container}
     >
+      <CustomToast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onHide={() => setToastVisible(false)}
+      />
       <ScrollView
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
@@ -270,8 +285,8 @@ export default function DiscountScreen() {
             </Text>
           </TouchableOpacity>
 
-          {message ? (
-            <Text style={styles.message}>{message}</Text>
+          {toastMessage ? (
+            <Text style={styles.message}>{toastMessage}</Text>
           ) : null}
         </View>
 

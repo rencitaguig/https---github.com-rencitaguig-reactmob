@@ -8,19 +8,19 @@ export const storeDiscountNotification = async (discount, userRole) => {
       title: '🎉 New Discount Available!',
       body: `Get ${discount.percentage}% off with code: ${discount.code}`,
       data: {
-        screen: 'DiscountDetailsScreen',
-        discountId: discount._id,
-        params: {
-          discountId: discount._id
-        },
-        type: 'discount'
+        screen: 'DiscountDetailsScreen',  // Changed from 'DiscountDetails' to match navigation
+        discountId: discount._id
       }
     };
 
     // Store notification
     const existingNotifs = await SecureStore.getItemAsync('newDiscountNotifications');
     const notifications = existingNotifs ? JSON.parse(existingNotifs) : [];
+    
+    // Add timestamp to help with ordering
+    notification.timestamp = new Date().toISOString();
     notifications.push(notification);
+    
     await SecureStore.setItemAsync('newDiscountNotifications', JSON.stringify(notifications));
 
     return true;
