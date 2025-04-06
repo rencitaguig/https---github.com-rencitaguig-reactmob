@@ -7,7 +7,8 @@ import * as SecureStore from "expo-secure-store"; // Import Secure Store
 export const OrderContext = createContext();
 
 export const OrderProvider = ({ children }) => {
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState([]); // All orders for admin
+  const [userOrders, setUserOrders] = useState([]); // User-specific orders
 
   useEffect(() => {
     fetchOrders();
@@ -16,15 +17,30 @@ export const OrderProvider = ({ children }) => {
   const fetchOrders = async () => {
     try {
       const token = await SecureStore.getItemAsync('token'); // Use Secure Store to get token
+      const userId = await SecureStore.getItemAsync('userId'); // Use Secure Store to get userId
+      const userRole = await SecureStore.getItemAsync('userRole'); // Use Secure Store to get userRole
+      
       if (!token) {
         console.error("No token found. Unable to fetch orders.");
         return;
       }
+
       const response = await axios.get(`${BASE_URL}/api/orders`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      console.log('Fetched Orders:', response.data); // Debug log
-      setOrders(response.data); // Fetch all orders without filtering by user ID
+
+      // Set all orders for admin view
+      setOrders(response.data);
+
+      // Filter and set user-specific orders
+      if (userId) {
+        const filteredOrders = response.data.filter(order => {
+          if (!order.userId) return false;
+          const orderUserId = typeof order.userId === 'object' ? order.userId._id : order.userId;
+          return orderUserId === userId;
+        });
+        setUserOrders(filteredOrders);
+      }
     } catch (error) {
       console.error("Error fetching orders:", error.response ? error.response.data : error.message);
     }
@@ -47,7 +63,12 @@ export const OrderProvider = ({ children }) => {
   };
 
   return (
-    <OrderContext.Provider value={{ orders, fetchOrders, updateOrderStatus }}>
+    <OrderContext.Provider value={{ 
+      orders, // All orders for admin
+      userOrders, // Filtered orders for user
+      fetchOrders, 
+      updateOrderStatus 
+    }}>
       {children}
     </OrderContext.Provider>
   );

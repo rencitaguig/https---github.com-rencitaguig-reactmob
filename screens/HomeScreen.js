@@ -2,7 +2,6 @@ import React, { useEffect, useState, useContext, useRef } from "react";
 import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, Modal, ScrollView, RefreshControl, Animated, Dimensions } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchProducts } from "../store/productSlice";
-import { fetchReviews, deleteReview } from "../store/reviewSlice";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CartContext } from "../context/CartContext";
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,7 +16,6 @@ import BASE_URL from "../config"; // Import BASE_URL
 export default function HomeScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const { products, loading: productsLoading } = useSelector((state) => state.products);
-  const { reviews, loading: reviewsLoading, deleteLoading } = useSelector((state) => state.reviews);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -34,6 +32,8 @@ export default function HomeScreen({ navigation, route }) {
   const [user, setUser] = useState(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editRating, setEditRating] = useState("");
+  const [reviews, setReviews] = useState([]);
+  const [editComment, setEditComment] = useState('');
 
   // Replace the notifications useEffect with this simpler navigation handler
   useEffect(() => {
@@ -49,92 +49,102 @@ export default function HomeScreen({ navigation, route }) {
     await addToCart(item);
   };
 
-  const handleProductSelect = (product) => {
+  const handleProductSelect = async (product) => {
     if (!product._id) {
       console.warn('Product missing ID:', product);
       return;
     }
     setSelectedProduct(product);
-    dispatch(fetchReviews(product._id));
+    try {
+      const token = await SecureStore.getItemAsync('token');
+      // Update the endpoint to match the new backend route
+      const response = await axios.get(`${BASE_URL}/api/reviews/product/${product._id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setReviews(response.data);
+    } catch (error) {
+      console.error("Error fetching reviews:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to load reviews'
+      });
+    }
     setModalVisible(true);
   };
 
   const handleUpdateReview = async () => {
     try {
-      const token = await SecureStore.getItemAsync("token"); // Retrieve token from SecureStore
-      if (!token) {
+      const token = await SecureStore.getItemAsync('token');
+      if (!token || !selectedReview) {
         Toast.show({
-          type: "error",
-          text1: "Please log in to update reviews",
+          type: 'error',
+          text1: 'Error',
+          text2: 'Unable to update review'
         });
         return;
       }
 
-      const updatedData = {
-        rating: editRating, // Use the selected star rating
-        comment: editComment,
-      };
-
-      const response = await axios.put(
+      await axios.put(
         `${BASE_URL}/api/reviews/${selectedReview._id}`,
-        updatedData,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { rating: editRating, comment: editComment },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      // Refresh reviews and update UI
-      if (selectedProduct?._id) {
-        await dispatch(fetchReviews(selectedProduct._id));
-      }
-
+      // Refresh reviews
+      const response = await axios.get(`${BASE_URL}/api/reviews/product/${selectedProduct._id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setReviews(response.data);
+      
       setEditModalVisible(false);
       setModalVisible(true);
-
+      
       Toast.show({
-        type: "success",
-        text1: "Review updated successfully",
+        type: 'success',
+        text1: 'Review updated successfully'
       });
     } catch (error) {
       console.error("Update review error:", error);
       Toast.show({
-        type: "error",
-        text1: "Failed to update review",
-        text2: error.response?.data?.message || error.message,
+        type: 'error',
+        text1: 'Error',
+        text2: error.response?.data?.message || 'Failed to update review'
       });
     }
   };
 
   const handleDeleteReview = async (reviewId) => {
     try {
-      const token = await SecureStore.getItemAsync("token"); // Retrieve token from SecureStore
+      const token = await SecureStore.getItemAsync('token');
       if (!token) {
         Toast.show({
-          type: "error",
-          text1: "Please log in to delete reviews",
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please log in to delete reviews'
         });
         return;
       }
 
       await axios.delete(`${BASE_URL}/api/reviews/${reviewId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       // Refresh reviews
-      if (selectedProduct?._id) {
-        dispatch(fetchReviews(selectedProduct._id));
-      }
+      const response = await axios.get(`${BASE_URL}/api/reviews/product/${selectedProduct._id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setReviews(response.data);
 
       Toast.show({
-        type: "success",
-        text1: "Review deleted successfully",
+        type: 'success',
+        text1: 'Review deleted successfully'
       });
     } catch (error) {
-      console.error("Delete review error:", error);
       Toast.show({
-        type: "error",
-        text1: "Failed to delete review",
-        text2: error.response?.data?.message || error.message,
+        type: 'error',
+        text1: 'Error',
+        text2: error.response?.data?.message || 'Failed to delete review'
       });
     }
   };
@@ -201,9 +211,9 @@ export default function HomeScreen({ navigation, route }) {
   useEffect(() => {
     const getUserData = async () => {
       try {
-        const userId = await AsyncStorage.getItem('userId');
+        const userId = await SecureStore.getItemAsync('userId');
         if (userId) {
-          setUser({ userId: userId }); // Store just the ID string
+          setUser({ userId: userId });
         }
       } catch (error) {
         console.error('Error getting user data:', error);
@@ -356,52 +366,54 @@ export default function HomeScreen({ navigation, route }) {
           onRequestClose={() => setModalVisible(false)}
         >
           <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <Image source={{ uri: selectedProduct.image }} style={styles.modalImage} />
-              <Text style={styles.modalTitle}>{selectedProduct.name}</Text>
-              <Text style={styles.modalDescription}>{selectedProduct.description}</Text>
-              <Text style={styles.modalPrice}>₱{selectedProduct.price}</Text>
-              <Text style={styles.modalTitle}>Reviews:</Text>
-              <FlatList
-                data={reviews}
-                keyExtractor={(item) => `review-${item._id}`}
-                renderItem={({ item }) => (
-                  <View key={`item-${item._id}`} style={styles.reviewCard}>
-                    <StarRating rating={Number(item.rating)} size={16} />
-                    <Text style={styles.reviewText}>Comment: {item.comment}</Text>
-                    <Text style={styles.reviewText}>By: {item.userId.name}</Text>
-                    <View style={styles.actionButtons}>
-                      <TouchableOpacity 
-                        onPress={() => {
-                          setSelectedReview(item);
-                          setEditRating(item.rating.toString());
-                          setEditComment(item.comment);
-                          setEditModalVisible(true);
-                        }} 
-                        style={styles.editButton}
-                      >
-                        <Text style={styles.editButtonText}>Edit</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        onPress={() => handleDeleteReview(item._id)} 
-                        style={styles.deleteButton}
-                        disabled={deleteLoading}
-                      >
-                        <Text style={styles.deleteButtonText}>
-                          Delete
-                        </Text>
-                      </TouchableOpacity>
+            <ScrollView style={styles.modalScrollView}>
+              <View style={styles.modalContent}>
+                <Image source={{ uri: selectedProduct.image }} style={styles.modalImage} />
+                <Text style={styles.modalTitle}>{selectedProduct.name}</Text>
+                <Text style={styles.modalDescription}>{selectedProduct.description}</Text>
+                <Text style={styles.modalPrice}>₱{selectedProduct.price}</Text>
+                <Text style={styles.modalTitle}>Reviews:</Text>
+                {reviews.length > 0 ? (
+                  reviews.map((review) => (
+                    <View key={review._id} style={styles.reviewCard}>
+                      <StarRating rating={Number(review.rating)} size={16} />
+                      <Text style={styles.reviewText}>Comment: {review.comment}</Text>
+                      <Text style={styles.reviewText}>By: {review.userId?.name || 'Anonymous'}</Text>
+                      {user && user.userId === (review.userId?._id || review.userId) && (
+                        <View style={styles.actionButtons}>
+                          <TouchableOpacity 
+                            onPress={() => {
+                              setSelectedReview(review);
+                              setEditRating(review.rating.toString());
+                              setEditComment(review.comment);
+                              setEditModalVisible(true);
+                              setModalVisible(false);
+                            }} 
+                            style={styles.editButton}
+                          >
+                            <Text style={styles.editButtonText}>Edit</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            onPress={() => handleDeleteReview(review._id)} 
+                            style={styles.deleteButton}
+                          >
+                            <Text style={styles.deleteButtonText}>Delete</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
-                  </View>
+                  ))
+                ) : (
+                  <Text style={styles.noReviewsText}>No reviews yet</Text>
                 )}
-              />
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.closeButtonText}>Close</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.closeButtonText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </Modal>
       )}
@@ -847,5 +859,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#3E2723',
     marginBottom: 10,
+  },
+  noReviewsText: {
+    fontSize: 16,
+    color: '#5D4037',
+    textAlign: 'center',
+    marginVertical: 10,
   }
 });

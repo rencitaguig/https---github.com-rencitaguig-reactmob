@@ -198,9 +198,14 @@ export default function ProfileScreen() {
       const response = await axios.get(`${BASE_URL}/api/orders`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const filteredOrders = response.data.filter(
-        (order) => order.userId._id === userId
-      );
+      
+      // Safer filtering that handles null userId
+      const filteredOrders = response.data.filter(order => {
+        if (!order.userId) return false;
+        const orderUserId = typeof order.userId === 'object' ? order.userId._id : order.userId;
+        return orderUserId === userId;
+      });
+      
       setUserOrders(filteredOrders);
     } catch (error) {
       console.error("Error fetching user orders:", error);
