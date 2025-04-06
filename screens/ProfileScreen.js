@@ -692,6 +692,43 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = async () => {
+    try {
+      const token = await SecureStore.getItemAsync('token');
+      if (!token) {
+        console.log('No token found, proceeding with local logout');
+        await performLocalLogout();
+        return;
+      }
+
+      try {
+        // Call logout endpoint
+        await axios.post(
+          `${BASE_URL}/api/auth/logout`,
+          {},
+          {
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
+      } catch (error) {
+        console.log('Server logout failed, proceeding with local logout');
+      }
+
+      // Always perform local logout
+      await performLocalLogout();
+
+    } catch (error) {
+      console.error('Logout error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to logout. Please try again.',
+        visibilityTime: 3000,
+        position: 'top',
+      });
+    }
+  };
+
+  const performLocalLogout = async () => {
     await SecureStore.deleteItemAsync('token');
     await SecureStore.deleteItemAsync('userId');
     await SecureStore.deleteItemAsync('userRole');
@@ -699,6 +736,7 @@ export default function ProfileScreen() {
     setLoggedIn(false);
     setUserName("");
     setProfileImage(null);
+    
     Toast.show({
       type: 'success',
       text1: 'Success',
