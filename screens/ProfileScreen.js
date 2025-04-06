@@ -82,7 +82,7 @@ const checkPendingDiscounts = async () => {
         content: {
           title: '🎉 New Discount Available!',
           body: `Save ${discount.percentage}% with code: ${discount.code}\nValid until ${new Date(discount.expiryDate).toLocaleDateString()}`,
-          data: { screen: 'DiscountDetails', discountId: discount.id },
+          data: { screen: 'DiscountDetailsScreen', discountId: discount.id },
         },
         trigger: null,
       });
@@ -331,7 +331,7 @@ export default function ProfileScreen() {
             title: 'New Discount Available! 🎉',
             body: `Use code ${discount.code} for ${discount.percentage}% off!`,
             data: { 
-              screen: 'DiscountDetails',
+              screen: 'DiscountDetailsScreen',
               discountId: discount._id 
             },
           },
@@ -1041,7 +1041,7 @@ export default function ProfileScreen() {
           <View style={styles.authContainer}>
             {/* Social Login/Register Buttons First */}
             <View style={styles.socialButtonsContainer}>
-              <Text style={styles.authTitle}>Welcome to Our App</Text>
+              <Text style={styles.authTitle}>Welcome to Clothique</Text>
               <Text style={styles.authSubtitle}>Continue with</Text>
               
               <TouchableOpacity 
