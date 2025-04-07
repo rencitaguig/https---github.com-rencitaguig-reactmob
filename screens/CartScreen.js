@@ -8,15 +8,15 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
-  Alert,
 } from "react-native";
 import { CartContext } from "../context/CartContext";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSelector } from 'react-redux';
-import * as SecureStore from "expo-secure-store"; // Import Secure Store
+import * as SecureStore from "expo-secure-store";
+import Toast from 'react-native-toast-message';
 
-const SHIPPING_FEE = 75; // Add constant for shipping fee
+const SHIPPING_FEE = 75;
 
 export default function CartScreen() {
   const { cart, removeFromCart, checkout } = useContext(CartContext);
@@ -36,7 +36,12 @@ export default function CartScreen() {
       const token = await SecureStore.getItemAsync('token');
       
       if (!userId || !token) {
-        Alert.alert("Error", "Please log in to continue.");
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please log in to continue',
+          position: 'top',
+        });
         return;
       }
 
@@ -48,7 +53,6 @@ export default function CartScreen() {
         finalPrice = finalPrice - discountAmount;
       }
 
-      // Create order data with correct number types
       const orderData = {
         userId: userId,
         items: cart.map(item => ({
@@ -66,13 +70,20 @@ export default function CartScreen() {
       await checkout(orderData);
       setModalVisible(false);
       setAppliedDiscount(null);
-      Alert.alert("Success", "Order placed successfully!");
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Order placed successfully! 🛍️',
+        position: 'top',
+      });
     } catch (error) {
       console.error("Checkout error:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || "Failed to create order. Please try again."
-      );
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.response?.data?.message || "Failed to create order. Please try again.",
+        position: 'top',
+      });
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -88,8 +99,19 @@ export default function CartScreen() {
     if (discount) {
       setAppliedDiscount(discount);
       setDiscountCode('');
+      Toast.show({
+        type: 'success',
+        text1: 'Discount Applied',
+        text2: `${discount.percentage}% discount added to your order`,
+        position: 'top',
+      });
     } else {
-      Alert.alert('Invalid Code', 'Please enter a valid discount code');
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid Code',
+        text2: 'Please enter a valid discount code',
+        position: 'top',
+      });
     }
   };
 
@@ -248,6 +270,7 @@ export default function CartScreen() {
           </Modal>
         </>
       )}
+      <Toast />
     </LinearGradient>
   );
 }
@@ -258,7 +281,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 15,
-    paddingBottom: 100, // Space for checkout button
+    paddingBottom: 100,
   },
   emptyContainer: {
     flex: 1,

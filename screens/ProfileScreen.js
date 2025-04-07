@@ -6,7 +6,6 @@ import {
   Text, 
   Image, 
   StyleSheet, 
-  FlatList, 
   Modal, 
   ScrollView, 
   TouchableOpacity, 
@@ -925,10 +924,30 @@ export default function ProfileScreen() {
   );
 
   const renderRegistrationForm = () => (
-    <>
-      <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
-      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+    <View style={styles.formContainer}>
+      <TextInput 
+        placeholder="Name"
+        value={name}
+        onChangeText={setName}
+        style={styles.input}
+        placeholderTextColor="#8D6E63"
+      />
+      <TextInput 
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        style={styles.input}
+        placeholderTextColor="#8D6E63"
+      />
+      <TextInput 
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        style={styles.input}
+        placeholderTextColor="#8D6E63"
+      />
+      
       <View style={styles.imageButtonsContainer}>
         <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
           <Text style={styles.imageButtonText}>Choose from Gallery</Text>
@@ -937,55 +956,81 @@ export default function ProfileScreen() {
           <Text style={styles.imageButtonText}>Take Photo</Text>
         </TouchableOpacity>
       </View>
+      
       {image && (
         <Image source={{ uri: image.uri }} style={styles.imagePreview} />
       )}
-      <Button title="Register" onPress={handleRegister} />
-      <Button title="Switch to Login" onPress={() => setIsLogin(true)} />
-    </>
+      
+      <TouchableOpacity style={styles.loginButton} onPress={handleRegister}>
+        <Text style={styles.buttonText}>Register</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={styles.switchButton}
+        onPress={() => setIsLogin(true)}
+      >
+        <Text style={styles.switchButtonText}>Already have an account? Login</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   const renderOrders = () => {
     if (!userOrders || userOrders.length === 0) {
-      return <Text>No orders found.</Text>;
+      return <Text style={styles.noOrdersText}>No orders found.</Text>;
     }
 
     return (
-      <>
-        <Text style={styles.text}>Your Orders:</Text>
-        <FlatList
-          data={userOrders}
-          keyExtractor={(item) => item._id}
-          renderItem={({ item }) => (
-            <View style={styles.orderCard}>
-              <Text style={styles.orderText}>Order ID: {item._id}</Text>
-              <Text style={styles.orderText}>Total Price: ₱{item.totalPrice}</Text>
-              <Text style={styles.orderText}>Status: {item.status}</Text>
-              <FlatList
-                data={item.items}
-                keyExtractor={(item, index) => `${item.productId}-${index}`}
-                renderItem={({ item }) => (
-                  <View style={styles.itemCard}>
-                    <Text style={styles.itemText}>{item.name}</Text>
-                    <Text style={styles.itemText}>Quantity: {item.quantity}</Text>
-                    <Text style={styles.itemText}>Price: ₱{item.price}</Text>
-                  </View>
-                )}
-              />
-              {item.status === "Delivered" && (
-                <Button
-                  title="Write a Review"
-                  onPress={() => {
-                    setSelectedOrder(item);
-                    setReviewModalVisible(true);
-                  }}
-                />
-              )}
+      <View style={styles.ordersListContainer}>
+        {userOrders.map((item) => (
+          <View key={item._id} style={styles.orderCard}>
+            <View style={styles.orderHeader}>
+              <Text style={styles.orderIdText}>Order #{item._id.slice(-6)}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                <Text style={styles.statusText}>{item.status}</Text>
+              </View>
             </View>
-          )}
-        />
-      </>
+            
+            <View style={styles.orderDetails}>
+              <Text style={styles.orderText}>Total Price: ₱{item.totalPrice}</Text>
+              <View style={styles.itemsContainer}>
+                {item.items.map((orderItem, index) => (
+                  <View key={`${orderItem.productId}-${index}`} style={styles.itemCard}>
+                    <Text style={styles.itemText}>{orderItem.name}</Text>
+                    <View style={styles.itemDetails}>
+                      <Text style={styles.itemQuantity}>x{orderItem.quantity}</Text>
+                      <Text style={styles.itemPrice}>₱{orderItem.price}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {item.status === "Delivered" && (
+              <TouchableOpacity
+                style={styles.reviewButton}
+                onPress={() => {
+                  setSelectedOrder(item);
+                  setReviewModalVisible(true);
+                }}
+              >
+                <FontAwesome name="star" size={16} color="#FFF" />
+                <Text style={styles.reviewButtonText}>Write a Review</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))}
+      </View>
     );
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Pending': return '#FFA000';
+      case 'Shipped': return '#1E88E5';
+      case 'Delivered': return '#43A047';
+      case 'Cancelled': return '#E53935';
+      default: return '#757575';
+    }
   };
 
   const renderReviewModal = () => (
@@ -1001,11 +1046,10 @@ export default function ProfileScreen() {
             <Text style={styles.modalTitle}>Write a Review</Text>
             <Text style={styles.text}>Select a Product:</Text>
             {selectedOrder && selectedOrder.items && (
-              <FlatList
-                data={selectedOrder.items}
-                keyExtractor={(item, index) => `${item.productId}-${index}`}
-                renderItem={({ item }) => (
+              <View>
+                {selectedOrder.items.map((item, index) => (
                   <TouchableOpacity
+                    key={`${item.productId}-${index}`}
                     style={[
                       styles.productCard,
                       selectedProduct?.productId === item.productId && styles.selectedProductCard
@@ -1015,8 +1059,8 @@ export default function ProfileScreen() {
                     <Text style={styles.productName}>{item.name}</Text>
                     <Text style={styles.productPrice}>₱{item.price.toFixed(2)}</Text>
                   </TouchableOpacity>
-                )}
-              />
+                ))}
+              </View>
             )}
             
             <Text style={styles.ratingLabel}>Rate this product:</Text>
@@ -1058,23 +1102,54 @@ export default function ProfileScreen() {
       colors={['#EFEBE9', '#D7CCC8', '#BCAAA4']}
       style={styles.gradientBackground}
     >
-      <View style={styles.container}>
+      <ScrollView style={styles.container}>
         {loggedIn ? (
-          <>
-            <View style={styles.headerContainer}>
-              <Text style={styles.text}>Welcome, {userName}</Text>
-              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                <Text style={styles.buttonText}>Logout</Text>
+          <View>
+            <View style={styles.welcomeContainer}>
+              {profileImage && (
+                <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              )}
+              <View style={styles.welcomeTextContainer}>
+                <Text style={styles.welcomeText}>Welcome back,</Text>
+                <Text style={styles.userNameText}>{userName}</Text>
+              </View>
+            </View>
+
+            <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity 
+                style={styles.actionButton} 
+                onPress={handleEditProfile}
+              >
+                <FontAwesome name="edit" size={20} color="#FFF" />
+                <Text style={styles.actionButtonText}>Edit Profile</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: showOrders ? '#D32F2F' : '#8B4513' }]} 
+                onPress={() => setShowOrders(!showOrders)}
+              >
+                <FontAwesome name={showOrders ? "eye-slash" : "eye"} size={20} color="#FFF" />
+                <Text style={styles.actionButtonText}>
+                  {showOrders ? "Hide Orders" : "Show Orders"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: '#D32F2F' }]} 
+                onPress={handleLogout}
+              >
+                <FontAwesome name="sign-out" size={20} color="#FFF" />
+                <Text style={styles.actionButtonText}>Logout</Text>
               </TouchableOpacity>
             </View>
-            {profileImage && <Image source={{ uri: profileImage }} style={styles.profileImage} />}
-            <TouchableOpacity style={styles.button} onPress={handleEditProfile}>
-              <Text style={styles.buttonText}>Edit Profile</Text>
-            </TouchableOpacity>
-            <Button title={showOrders ? "Hide Orders" : "Show Orders"} onPress={() => setShowOrders(!showOrders)} />
-            {showOrders && renderOrders()}
-            {renderEditProfile()}
-          </>
+
+            {showOrders && (
+              <View style={styles.ordersContainer}>
+                <Text style={styles.sectionTitle}>Your Orders</Text>
+                {renderOrders()}
+              </View>
+            )}
+          </View>
         ) : (
           <View style={styles.authContainer}>
             {/* Social Login/Register Buttons First */}
@@ -1138,9 +1213,10 @@ export default function ProfileScreen() {
         )}
         {message ? <Text>{message}</Text> : null}
 
+        {renderEditProfile()}
         {renderReviewModal()}
         <Toast />
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -1167,15 +1243,15 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
     color: '#3E2723',
+    borderWidth: 1,
+    borderColor: '#D7CCC8',
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    marginVertical: 20,
-    alignSelf: 'center',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: '#8B4513',
   },
   orderCard: {
     backgroundColor: '#FFFFFF',
@@ -1183,14 +1259,40 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 15,
     elevation: 3,
-    shadowColor: '#8B4513',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: '#8B4513',
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  orderIdText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3E2723',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  orderDetails: {
+    backgroundColor: '#FFF8F3',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
   },
   orderText: {
     fontSize: 16,
-    color: '#3E2723',
+    color: '#5D4037',
+    marginBottom: 8,
   },
   itemCard: {
     flexDirection: 'row',
@@ -1198,11 +1300,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#EFEBE9',
+    borderBottomColor: '#E8E0DD',
   },
   itemText: {
-    fontSize: 15,
-    color: '#5D4037',
+    flex: 1,
+    fontSize: 14,
+    color: '#3E2723',
+  },
+  itemDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  itemQuantity: {
+    fontSize: 14,
+    color: '#8D6E63',
+  },
+  itemPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8B4513',
+  },
+  reviewButton: {
+    backgroundColor: '#8B4513',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 25,
+    marginTop: 12,
+    gap: 8,
+  },
+  reviewButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  noOrdersText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#8D6E63',
+    marginTop: 20,
   },
   button: {
     backgroundColor: 'rgba(62, 39, 35, 0.9)',
@@ -1288,25 +1426,27 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    marginVertical: 10,
-    alignSelf: 'center',
+    marginVertical: 15,
+    borderWidth: 3,
+    borderColor: '#8B4513',
   },
   imageButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    width: '100%',
     marginVertical: 15,
-    paddingHorizontal: 10,
+    gap: 10,
   },
   imageButton: {
+    flex: 1,
     backgroundColor: '#8B4513',
     padding: 12,
     borderRadius: 25,
-    flex: 0.48,
     elevation: 2,
   },
   imageButtonText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
     fontWeight: '600',
   },
@@ -1334,12 +1474,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 25,
+    width: '100%',
     marginBottom: 12,
     elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
   },
   socialButtonsContainer: {
     marginVertical: 20,
@@ -1413,6 +1550,7 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     width: '100%',
+    alignItems: 'center',
   },
   productCard: {
     backgroundColor: '#FFF',
@@ -1460,4 +1598,80 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     elevation: 3,
   },
+  welcomeContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  welcomeTextContainer: {
+    marginLeft: 15,
+    flex: 1,
+  },
+  welcomeText: {
+    fontSize: 16,
+    color: '#8D6E63',
+    marginBottom: 4,
+  },
+  userNameText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#3E2723',
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 10,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#8B4513',
+    padding: 15,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    gap: 8,
+  },
+  actionButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 5,
+  },
+  ordersContainer: {
+    backgroundColor: '#EFEBE9',
+    borderRadius: 20,
+    padding: 20,
+    elevation: 4,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#3E2723',
+    marginBottom: 15,
+  },
+  ordersListContainer: {
+    paddingBottom: 20,
+  },
+  itemsContainer: {
+    marginTop: 8,
+  }
 });

@@ -238,7 +238,9 @@ export default function HomeScreen({ navigation, route }) {
         Toast.show({
           type: 'error',
           text1: 'Error',
-          text2: 'Unable to update review'
+          text2: 'Unable to update review',
+          position: 'top',
+          visibilityTime: 3000,
         });
         return;
       }
@@ -260,14 +262,19 @@ export default function HomeScreen({ navigation, route }) {
       
       Toast.show({
         type: 'success',
-        text1: 'Review updated successfully'
+        text1: 'Success',
+        text2: 'Review updated successfully! ✨',
+        position: 'top',
+        visibilityTime: 3000,
       });
     } catch (error) {
       console.error("Update review error:", error);
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: error.response?.data?.message || 'Failed to update review'
+        text2: error.response?.data?.message || 'Failed to update review',
+        position: 'top',
+        visibilityTime: 3000,
       });
     }
   };
@@ -279,7 +286,9 @@ export default function HomeScreen({ navigation, route }) {
         Toast.show({
           type: 'error',
           text1: 'Error',
-          text2: 'Please log in to delete reviews'
+          text2: 'Please log in to delete reviews',
+          position: 'top',
+          visibilityTime: 3000,
         });
         return;
       }
@@ -296,13 +305,18 @@ export default function HomeScreen({ navigation, route }) {
 
       Toast.show({
         type: 'success',
-        text1: 'Review deleted successfully'
+        text1: 'Success',
+        text2: 'Review deleted successfully! 🗑️',
+        position: 'top',
+        visibilityTime: 3000,
       });
     } catch (error) {
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: error.response?.data?.message || 'Failed to delete review'
+        text2: error.response?.data?.message || 'Failed to delete review',
+        position: 'top',
+        visibilityTime: 3000,
       });
     }
   };
@@ -416,6 +430,40 @@ export default function HomeScreen({ navigation, route }) {
           }]
         }
       ]}>
+
+<Text style={styles.drawerSectionTitle}>Promotional Banners</Text>
+          <View style={styles.bannerFilterContainer}>
+            {promotionalBanners.map((banner) => (
+              <TouchableOpacity
+                key={banner}
+                style={[
+                  styles.drawerBannerButton,
+                  selectedBanner === banner && styles.drawerBannerButtonActive,
+                  selectedBanner === banner && { backgroundColor: banner !== 'All' ? getBannerColor(banner)?.color : '#8B4513' }
+                ]}
+                onPress={() => {
+                  setSelectedBanner(banner);
+                  toggleDrawer();
+                }}
+              >
+                {banner !== 'All' && getBannerColor(banner) && (
+                  <Ionicons 
+                    name={getBannerColor(banner).icon} 
+                    size={16} 
+                    color={selectedBanner === banner ? '#FFF' : '#5D4037'} 
+                    style={styles.drawerBannerIcon}
+                  />
+                )}
+                <Text style={[
+                  styles.drawerBannerText,
+                  selectedBanner === banner && styles.drawerBannerTextActive
+                ]}>
+                  {banner}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          
         <Text style={styles.drawerTitle}>Filters</Text>
         
         <Text style={styles.drawerSectionTitle}>Categories</Text>
@@ -462,38 +510,7 @@ export default function HomeScreen({ navigation, route }) {
             />
           </View>
           
-          <Text style={styles.drawerSectionTitle}>Promotional Banners</Text>
-          <View style={styles.bannerFilterContainer}>
-            {promotionalBanners.map((banner) => (
-              <TouchableOpacity
-                key={banner}
-                style={[
-                  styles.drawerBannerButton,
-                  selectedBanner === banner && styles.drawerBannerButtonActive,
-                  selectedBanner === banner && { backgroundColor: banner !== 'All' ? getBannerColor(banner)?.color : '#8B4513' }
-                ]}
-                onPress={() => {
-                  setSelectedBanner(banner);
-                  toggleDrawer();
-                }}
-              >
-                {banner !== 'All' && getBannerColor(banner) && (
-                  <Ionicons 
-                    name={getBannerColor(banner).icon} 
-                    size={16} 
-                    color={selectedBanner === banner ? '#FFF' : '#5D4037'} 
-                    style={styles.drawerBannerIcon}
-                  />
-                )}
-                <Text style={[
-                  styles.drawerBannerText,
-                  selectedBanner === banner && styles.drawerBannerTextActive
-                ]}>
-                  {banner}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+     
 
           <TouchableOpacity 
             style={styles.drawerClearButton}
