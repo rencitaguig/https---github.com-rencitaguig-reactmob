@@ -5,13 +5,14 @@ import CartScreen from "../screens/CartScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import AdminScreen from "../screens/AdminScreen";
 import DiscountScreen from "../screens/DiscountScreen";
+import NotificationsScreen from "../screens/NotificationsScreen";
 import { Ionicons } from "@expo/vector-icons";
-import { AuthContext } from "../context/AuthContext"; // Corrected from UserContext to AuthContext
+import { AuthContext } from "../context/AuthContext";
 
 const Tab = createBottomTabNavigator();
 
 export default function BottomTabNavigator() {
-  const { getVisibleScreens } = useContext(AuthContext); // Get the function to determine visible screens
+  const { getVisibleScreens } = useContext(AuthContext);
   const visibleScreens = getVisibleScreens();
 
   return (
@@ -60,6 +61,17 @@ export default function BottomTabNavigator() {
           options={{
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="cart" color={color} size={26} />
+            ),
+          }}
+        />
+      )}
+      {visibleScreens.includes("Notifications") && (
+        <Tab.Screen
+          name="Notifications"
+          component={NotificationsScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="notifications" color={color} size={26} />
             ),
           }}
         />

@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useContext, useRef } from "react";
+import React, { useEffect, useState, useContext, useRef, useMemo, useCallback } from "react";
 import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, Modal, ScrollView, RefreshControl, Animated, Dimensions } from "react-native";
+import Slider from '@react-native-community/slider';
 import { useSelector, useDispatch } from "react-redux";
 import { fetchProducts } from "../store/productSlice";
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,6 +14,7 @@ import * as SecureStore from "expo-secure-store"; // Import SecureStore
 import axios from "axios";
 import BASE_URL from "../config"; // Import BASE_URL
 import * as Notifications from 'expo-notifications'; // Add this import
+import ProductItemCard from '../components/ProductItemCard';
 
 export default function HomeScreen({ navigation, route }) {
   const dispatch = useDispatch();
@@ -37,6 +39,11 @@ export default function HomeScreen({ navigation, route }) {
   const [editComment, setEditComment] = useState('');
   const [selectedBanner, setSelectedBanner] = useState('All');
   const promotionalBanners = ['All', 'Sale', 'Hot', 'Top', 'New', 'Featured', 'Limited'];
+  const [sliderValue, setSliderValue] = useState(0);
+  const maxPriceLimit = useMemo(() => {
+    if (products.length === 0) return 10000;
+    return Math.ceil(Math.max(...products.map(p => p.price)) / 1000) * 1000;
+  }, [products]);
 
   // Replace the notifications useEffect with this simpler navigation handler
   useEffect(() => {
@@ -48,33 +55,7 @@ export default function HomeScreen({ navigation, route }) {
     }
   }, [route.params?.productId, route.params?.showProductModal, products]);
 
-  // After other useEffect hooks, add this new one for handling notifications 
-  useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data;
-      if (data?.screen === 'Product' && data?.productId) {
-        const product = products.find(p => p._id === data.productId);
-        if (product) {
-          handleProductSelect(product);
-        }
-      }
-    });
-
-    // Set up notification handler
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [products]);
-
-  // Add this useEffect for notification setup
+  // Remove all other notification-related useEffects and replace with this single one
   useEffect(() => {
     const setupNotifications = async () => {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -82,6 +63,7 @@ export default function HomeScreen({ navigation, route }) {
         return;
       }
 
+      // Set up notification handler
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
           shouldShowAlert: true,
@@ -89,116 +71,44 @@ export default function HomeScreen({ navigation, route }) {
           shouldSetBadge: true,
         }),
       });
+
+      // Check pending notifications
+      await checkPendingProductNotifications();
     };
 
-    setupNotifications();
-  }, []);
-
-  // Update this useEffect to better handle notifications
-  useEffect(() => {
+    // Set up notification response listener
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
-      console.log('Notification response data:', data); // Debug log
-
-      if (data?.screen === 'Product' && data?.productId && data?.showProductModal) {
-        const product = products.find(p => p._id === data.productId);
-        if (product) {
-          console.log('Found product, showing modal:', product); // Debug log
-          handleProductSelect(product);
-        } else {
-          console.log('Product not found:', data.productId); // Debug log
-        }
-      }
-    });
-
-    // Set up notification handler
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [products]);
-
-  // Add this useEffect to handle deep linking from notifications
-  useEffect(() => {
-    if (route.params?.productId && route.params?.showProductModal) {
-      // Wait for products to be loaded
-      if (products.length > 0) {
-        const product = products.find(p => p._id === route.params.productId);
-        if (product) {
-          handleProductSelect(product);
-        }
-      }
-    }
-  }, [route.params?.productId, route.params?.showProductModal, products]);
-
-  // Replace/update the notification useEffect
-  useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data;
-      console.log('Notification response received:', data); // Debug log
+      console.log('Notification response received:', data);
 
       if (data?.screen === 'Product' && data?.productId) {
         const product = products.find(p => p._id === data.productId);
         if (product) {
           console.log('Showing product modal for:', product.name);
           handleProductSelect(product);
-        } else {
-          console.log('Product not found:', data.productId);
         }
       }
     });
 
-    return () => subscription.remove();
+    setupNotifications();
+
+    // Cleanup
+    return () => {
+      if (subscription) {
+        subscription.remove();
+      }
+    };
   }, [products]);
 
-  // Add this function after other useEffects
-  const checkPendingProductNotifications = async () => {
-    try {
-      const pendingNotifs = await SecureStore.getItemAsync('pendingProductNotifications');
-      if (!pendingNotifs) return;
-
-      const notifications = JSON.parse(pendingNotifs);
-      if (notifications.length === 0) return;
-
-      // Show notifications
-      for (const notification of notifications) {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: notification.title,
-            body: notification.body,
-            data: notification.data
-          },
-          trigger: null // Show immediately
-        });
-      }
-
-      // Clear the notifications after showing them
-      await SecureStore.setItemAsync('pendingProductNotifications', JSON.stringify([]));
-    } catch (error) {
-      console.error('Error checking product notifications:', error);
-    }
-  };
-
-  // Add this useEffect to check notifications when component mounts
+  // Keep this route params effect separate as it handles different functionality
   useEffect(() => {
-    const checkNotifications = async () => {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        return;
+    if (route.params?.productId && route.params?.showProductModal && products.length > 0) {
+      const product = products.find(p => p._id === route.params.productId);
+      if (product) {
+        handleProductSelect(product);
       }
-
-      await checkPendingProductNotifications();
-    };
-
-    checkNotifications();
-  }, []);
+    }
+  }, [route.params?.productId, route.params?.showProductModal, products]);
 
   const handleAddToCart = async (item) => {
     await addToCart(item);
@@ -353,19 +263,19 @@ export default function HomeScreen({ navigation, route }) {
     setRefreshing(false);
   }, [dispatch]);
 
-  const toggleDrawer = () => {
+  const toggleDrawer = React.useCallback(() => {
     const toValue = drawerVisible ? -300 : 0;
+    setDrawerVisible(!drawerVisible);
     
-    // Use requestAnimationFrame to ensure animation queue is ready
-    requestAnimationFrame(() => {
-      Animated.timing(drawerAnim, {
-        toValue,
-        duration: 300,
-        useNativeDriver: true,
-        isInteraction: true,
-      }).start(() => setDrawerVisible(!drawerVisible));
-    });
-  };
+    Animated.spring(drawerAnim, {
+      toValue,
+      useNativeDriver: true,
+      stiffness: 1000,
+      damping: 50,
+      mass: 3,
+      overshootClamping: true,
+    }).start();
+  }, [drawerVisible, drawerAnim]);
 
   const getBannerColor = (banner) => {
     switch (banner?.toLowerCase()) {
@@ -399,6 +309,27 @@ export default function HomeScreen({ navigation, route }) {
     };
     getUserData();
   }, []);
+
+  const handleSliderChange = useCallback((value) => {
+    const roundedValue = Math.round(value / 100) * 100; // Round to nearest 100
+    setSliderValue(roundedValue);
+    setMaxPrice(roundedValue.toString());
+  }, []);
+
+  const renderItem = useCallback(({ item }) => (
+    <ProductItemCard
+      item={item}
+      onPress={handleProductSelect}
+      onAddToCart={handleAddToCart}
+      getBannerColor={getBannerColor}
+    />
+  ), [handleProductSelect, handleAddToCart, getBannerColor]);
+
+  const getItemLayout = useCallback((data, index) => ({
+    length: 280,
+    offset: 280 * index,
+    index,
+  }), []);
 
   return (
     <LinearGradient
@@ -508,6 +439,29 @@ export default function HomeScreen({ navigation, route }) {
               keyboardType="numeric"
               placeholderTextColor="#8D6E63"
             />
+            
+            <View style={styles.sliderContainer}>
+              <Text style={styles.sliderLabel}>Or use slider to set max price:</Text>
+              <Text style={styles.priceRangeText}>
+                Price up to: ₱{parseInt(sliderValue).toLocaleString()}
+              </Text>
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={maxPriceLimit}
+                value={parseInt(maxPrice) || 0}
+                onValueChange={handleSliderChange}
+                minimumTrackTintColor="#8B4513"
+                maximumTrackTintColor="#D7CCC8"
+                thumbTintColor="#8B4513"
+                step={100}  // Step by 100
+                tapToSeek={true}  // Enable tap to seek
+              />
+              <View style={styles.priceRangeLabels}>
+                <Text style={styles.priceRangeLabel}>₱0</Text>
+                <Text style={styles.priceRangeLabel}>₱{maxPriceLimit.toLocaleString()}</Text>
+              </View>
+            </View>
           </View>
           
      
@@ -538,8 +492,14 @@ export default function HomeScreen({ navigation, route }) {
 
       <FlatList
         data={filteredProducts}
+        renderItem={renderItem}
         keyExtractor={(item) => `product-${item._id}`}
+        getItemLayout={getItemLayout}
         numColumns={2}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
+        initialNumToRender={6}
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl
@@ -549,35 +509,6 @@ export default function HomeScreen({ navigation, route }) {
             tintColor="#8B4513"
           />
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity 
-            style={styles.card} 
-            onPress={() => handleProductSelect(item)}
-          >
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: item.image }} style={styles.image} />
-              {item.banner && item.banner !== 'none' && getBannerColor(item.banner) && (
-                <View style={[styles.bannerTag, { backgroundColor: getBannerColor(item.banner).color }]}>
-                  <Ionicons 
-                    name={getBannerColor(item.banner).icon}
-                    size={14} 
-                    color="#FFF" 
-                    style={styles.bannerIcon}
-                  />
-                  <Text style={styles.bannerTagText}>{item.banner.toUpperCase()}</Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.title}>{item.name}</Text>
-            <Text style={styles.price}>₱{item.price}</Text>
-            <TouchableOpacity 
-              onPress={() => handleAddToCart(item)} 
-              style={styles.addToCartButton}
-            >
-              <Text style={styles.addToCartText}>Add to Cart</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        )}
       />
       {selectedProduct && (
         <Modal
@@ -1126,5 +1057,46 @@ const styles = StyleSheet.create({
   drawerBannerTextActive: {
     color: '#FFF',
     fontWeight: '600',
+  },
+  sliderContainer: {
+    marginTop: 20,
+    paddingHorizontal: 5,
+    backgroundColor: '#FFF',
+    borderRadius: 15,
+    padding: 15,
+    elevation: 2,
+    shadowColor: '#8B4513',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+    marginVertical: 10,
+  },
+  priceRangeText: {
+    fontSize: 16,
+    color: '#3E2723',
+    marginBottom: 5,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  priceRangeLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 5,
+  },
+  priceRangeLabel: {
+    fontSize: 14,
+    color: '#5D4037',
+    fontWeight: '500',
+  },
+  sliderLabel: {
+    fontSize: 14,
+    color: '#5D4037',
+    fontWeight: '500',
+    marginBottom: 10,
+    textAlign: 'center',
   },
 });

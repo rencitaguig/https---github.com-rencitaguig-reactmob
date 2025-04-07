@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { addNotificationToHistory } from '../utils/notificationHelper';
 
 // Store notification for order status updates
 export const storeOrderStatusNotification = async (order, newStatus) => {
@@ -21,6 +22,9 @@ export const storeOrderStatusNotification = async (order, newStatus) => {
         type: 'orderStatus',
       }
     };
+
+    // Add to notification history
+    await addNotificationToHistory(notification);
 
     // Get existing notifications
     const existingNotifs = await SecureStore.getItemAsync('pendingOrderNotifications');

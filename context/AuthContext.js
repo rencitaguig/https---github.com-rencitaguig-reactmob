@@ -6,11 +6,12 @@ export const AuthProvider = ({ children }) => {
   const [userRole, setUserRole] = useState(null);
 
   const getVisibleScreens = () => {
+    
     if (userRole === "admin") {
       return ["Profile", "Discounts", "Admin"];
-    } else {
-      return ["Profile", "Home", "Cart"];
     }
+    
+    return ["Home", "Cart", "Notifications", "Profile"];
   };
 
   return (

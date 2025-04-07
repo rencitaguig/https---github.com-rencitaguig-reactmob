@@ -94,6 +94,15 @@ const checkPendingDiscounts = async () => {
   }
 };
 
+// Move notification handler setup outside component
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const [isLogin, setIsLogin] = useState(true);
@@ -118,6 +127,8 @@ export default function ProfileScreen() {
   const [cameraPermission, setCameraPermission] = useState(null);
   const [type, setType] = useState('back'); // Use string directly instead of CameraType.back
   const [selectedProduct, setSelectedProduct] = useState(null); // Add state for selected product
+  const [editAddress, setEditAddress] = useState(""); // Add address state
+  const [user, setUser] = useState(null);
 
   const { setOnOrderPlaced } = useContext(CartContext); // Access CartContext
   const { setUserRole } = useContext(AuthContext); // Access AuthContext
@@ -137,8 +148,11 @@ export default function ProfileScreen() {
           const userRes = await axios.get(`${BASE_URL}/api/users/profile`, {  // Updated endpoint
             headers: { Authorization: `Bearer ${token}` }
           });
+          setUser(userRes.data); // Store full user object
           setUserName(userRes.data.name);
+          setEmail(userRes.data.email);
           setProfileImage(userRes.data.profileImage);
+          setEditAddress(userRes.data.address || ''); // Initialize address
           fetchUserOrders(userId, token); // Fetch orders for the logged-in user
         } catch (error) {
           console.error("Error fetching user data:", error);
@@ -347,39 +361,40 @@ export default function ProfileScreen() {
 
   // Update the useEffect for notification setup
   useEffect(() => {
+    let isMounted = true;
+    let notificationSubscription = null;
+
     const setupNotifications = async () => {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Please enable notifications to receive updates!');
-        return;
-      }
-
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
-        }),
-      });
-
-      const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-        const data = response.notification.request.content.data;
-        console.log('Handling notification response:', data); // Add debug log
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (!isMounted) return;
         
-        if (data?.screen === 'OrderDetailsScreen' && data?.orderId) {
-          console.log('Navigating to order details:', data.orderId); // Add debug log
-          navigation.navigate('OrderDetailsScreen', { 
-            orderId: data.orderId 
-          });
+        if (status !== 'granted') {
+          console.log('Notification permission not granted');
+          return;
         }
-      });
 
-      return () => {
-        Notifications.removeNotificationSubscription(responseListener);
-      };
+        notificationSubscription = Notifications.addNotificationResponseReceivedListener(response => {
+          if (!isMounted) return;
+          
+          const data = response.notification.request.content.data;
+          if (data?.screen === 'OrderDetailsScreen' && data?.orderId) {
+            navigation.navigate('OrderDetailsScreen', { orderId: data.orderId });
+          }
+        });
+      } catch (error) {
+        console.error('Error setting up notifications:', error);
+      }
     };
 
     setupNotifications();
+
+    return () => {
+      isMounted = false;
+      if (notificationSubscription) {
+        Notifications.removeNotificationSubscription(notificationSubscription);
+      }
+    };
   }, [navigation]);
 
   const handleLogin = async () => {
@@ -755,7 +770,6 @@ export default function ProfileScreen() {
           text1: 'Error',
           text2: 'Please select a product to review.',
           visibilityTime: 3000,
-          position: 'top',
         });
         return;
       }
@@ -792,6 +806,7 @@ export default function ProfileScreen() {
   const handleEditProfile = () => {
     setEditName(userName);
     setEditEmail(email);
+    setEditAddress(user?.address || ''); // Safely access address
     setIsEditing(true);
   };
 
@@ -803,6 +818,7 @@ export default function ProfileScreen() {
       const updateData = {
         name: editName,
         email: editEmail,
+        address: editAddress, // Add address to update data
       };
 
       if (editImage) {
@@ -817,8 +833,12 @@ export default function ProfileScreen() {
         }
       );
 
+      setUser(response.data);
       setUserName(response.data.name);
       setEmail(response.data.email);
+      if (response.data.address) {
+        setEditAddress(response.data.address);
+      }
       if (response.data.profileImage) {
         setProfileImage(response.data.profileImage);
       }
@@ -905,6 +925,15 @@ export default function ProfileScreen() {
             value={editEmail}
             onChangeText={setEditEmail}
             keyboardType="email-address"
+            placeholderTextColor="#8D6E63"
+          />
+          <TextInput
+            style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+            placeholder="Address"
+            value={editAddress}
+            onChangeText={setEditAddress}
+            multiline={true}
+            numberOfLines={4}
             placeholderTextColor="#8D6E63"
           />
           
